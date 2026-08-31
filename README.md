@@ -1,5 +1,9 @@
 # Congressional Semantics: NLP to Economics — Bill Pass/Fail Prediction
 
+[![Python](https://img.shields.io/badge/Python-3.12%2B-blue?logo=python&logoColor&style=plastic&logoColor=blue)](https://www.python.org/downloads/release/python-3120/)
+[![App](https://img.shields.io/badge/Fullstack-Ubuntu-orange?logo=Ubuntu&style=plastic)](https://ubuntu.com/ai/data-science)
+[![Scikit-Learn](https://img.shields.io/badge/ScikitLearn-1.9-orange?logo=scikit-learn&style=plastic)](https://scikit-learn.org/stable/whats_new/v1.9.html)
+
 **Research Question:** Can the language and tone of U.S. Congressional floor speeches on economic legislation predict whether the associated bill passes or fails?
 
 ## Project Overview
