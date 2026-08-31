@@ -1,0 +1,12 @@
+{
+  "tests/test_data_utils.py::TestDataCleaning": true,
+  "tests/test_data_utils.py::TestTFIDFProcessing": true,
+  "tests/test_data_utils.py::TestDataValidation": true,
+  "tests/test_data_utils.py::TestEconomicFiltering": true,
+  "tests/test_data_utils.py::TestStanfordCitations": true,
+  "tests/test_nlp_utils.py::TestTextPreprocessing": true,
+  "tests/test_nlp_utils.py::TestEconomicFiltering": true,
+  "tests/test_nlp_utils.py::TestTFIDFVectorization": true,
+  "tests/test_nlp_utils.py::TestTopFeatureExtraction": true,
+  "tests/test_nlp_utils.py::TestTextFeatureExtraction": true
+}

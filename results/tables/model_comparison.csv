@@ -1,0 +1,5 @@
+model,accuracy_mean,accuracy_std,auc_roc_mean,auc_roc_std,precision_mean,precision_std,recall_mean,recall_std,f1_mean,f1_std
+Logistic Regression (Baseline),1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0
+LASSO,0.9995,0.0009999999999999788,1.0,0.0,0.9988950276243095,0.0022099447513812096,1.0,0.0,0.9994459833795014,0.0011080332409972194
+Ridge,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0
+Random Forest,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0,1.0,0.0

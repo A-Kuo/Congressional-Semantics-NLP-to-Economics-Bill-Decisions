@@ -1,0 +1,113 @@
+================================================================================
+STATISTICAL RIGOR ANALYSIS SUMMARY
+Congressional Bill Passage Prediction - Phase 1 Enhancement
+================================================================================
+
+TEST 1: P-VALUES FOR COEFFICIENTS
+--------------------------------------------------------------------------------
+Logistic: 0/2000 significant coefficients (p<0.05)
+LASSO: 44/50 significant non-zero coefficients (p<0.05)
+Ridge: 0/2000 significant coefficients (p<0.05)
+
+TEST 2: 95% CONFIDENCE INTERVALS FOR AUC
+--------------------------------------------------------------------------------
+Logistic: AUC = 1.0000 [95% CI: 1.0000-1.0000]
+LASSO: AUC = 1.0000 [95% CI: 1.0000-1.0000]
+Ridge: AUC = 1.0000 [95% CI: 1.0000-1.0000]
+RF: AUC = 1.0000 [95% CI: 1.0000-1.0000]
+
+TEST 3: PAIRED T-TEST FOR MODEL COMPARISON
+--------------------------------------------------------------------------------
+    Comparison Mean Diff AUC     SE T-Stat P-Value Significant
+RF vs Logistic       -0.0000 0.0000  -1.00  0.3739           ✗
+   RF vs LASSO       -0.0000 0.0000  -1.00  0.3739           ✗
+   RF vs Ridge       -0.0000 0.0000  -1.00  0.3739           ✗
+
+TEST 4: PER-FOLD BREAKDOWN
+--------------------------------------------------------------------------------
+
+Logistic:
+   Fold 1: 1.0000
+   Fold 2: 1.0000
+   Fold 3: 1.0000
+   Fold 4: 1.0000
+   Fold 5: 1.0000
+   Mean:   1.0000 ± 0.0000
+
+LASSO:
+   Fold 1: 1.0000
+   Fold 2: 1.0000
+   Fold 3: 1.0000
+   Fold 4: 1.0000
+   Fold 5: 1.0000
+   Mean:   1.0000 ± 0.0000
+
+Ridge:
+   Fold 1: 1.0000
+   Fold 2: 1.0000
+   Fold 3: 1.0000
+   Fold 4: 1.0000
+   Fold 5: 1.0000
+   Mean:   1.0000 ± 0.0000
+
+RF:
+   Fold 1: 1.0000
+   Fold 2: 0.9999
+   Fold 3: 1.0000
+   Fold 4: 1.0000
+   Fold 5: 1.0000
+   Mean:   1.0000 ± 0.0000
+
+TEST 5: REGRESSION METRICS
+--------------------------------------------------------------------------------
+   Model AUC-ROC       AUC 95% CI Accuracy Precision Recall     F1    MAE   RMSE     R²
+Logistic  1.0000 [1.0000, 1.0000]   1.0000    1.0000 1.0000 1.0000 0.2020 0.2035 0.8326
+   LASSO  1.0000 [1.0000, 1.0000]   1.0000    1.0000 1.0000 1.0000 0.0613 0.0638 0.9836
+   Ridge  1.0000 [1.0000, 1.0000]   1.0000    1.0000 1.0000 1.0000 0.4915 0.4915 0.0240
+      RF  1.0000 [1.0000, 1.0000]   0.9975    1.0000 0.9944 0.9972 0.1014 0.1068 0.9539
+
+TEST 6: BIAS-VARIANCE ANALYSIS
+--------------------------------------------------------------------------------
+   Model Train AUC Test AUC Overfitting  Status
+Logistic    1.0000   1.0000      0.0000 MINIMAL
+   LASSO    1.0000   1.0000      0.0000 MINIMAL
+   Ridge    1.0000   1.0000      0.0000 MINIMAL
+      RF    1.0000   1.0000      0.0000 MINIMAL
+
+FEATURE ANALYSIS: TOP SIGNIFICANT PREDICTORS
+--------------------------------------------------------------------------------
+Research Question: Which words predict bill passage/failure?
+
+Top LASSO features (by coefficient magnitude, with p-values):
+   1. deficit               coef=-9.1502  p=0.0022 **    → predicts FAIL
+   2. harmful               coef=-9.0600  p=0.0013 **    → predicts FAIL
+   3. unacceptable          coef=-8.5716  p=0.0020 **    → predicts FAIL
+   4. reject                coef=-8.5309  p=0.0014 **    → predicts FAIL
+   5. oppose                coef=-8.2766  p=0.0036 **    → predicts FAIL
+   6. failure               coef=-8.2439  p=0.0042 **    → predicts FAIL
+   7. concern               coef=-8.1370  p=0.0044 **    → predicts FAIL
+   8. irresponsible         coef=-8.0746  p=0.0039 **    → predicts FAIL
+   9. flawed                coef=-8.0656  p=0.0037 **    → predicts FAIL
+  10. objection             coef=-7.9615  p=0.0038 **    → predicts FAIL
+  11. jobs                  coef=+7.9612  p=0.0010 **    → predicts PASS
+  12. burden                coef=-7.9141  p=0.0052 **    → predicts FAIL
+  13. costly                coef=-7.9098  p=0.0057 **    → predicts FAIL
+  14. wasteful              coef=-7.8890  p=0.0036 **    → predicts FAIL
+  15. unsustainable         coef=-7.6982  p=0.0059 **    → predicts FAIL
+  16. risky                 coef=-7.6220  p=0.0077 **    → predicts FAIL
+  17. partisan              coef=-7.2862  p=0.0050 **    → predicts FAIL
+  18. controversial         coef=-7.2230  p=0.0093 **    → predicts FAIL
+  19. divisive              coef=-7.1242  p=0.0121 *     → predicts FAIL
+  20. dangerous             coef=-7.0309  p=0.0105 *     → predicts FAIL
+
+Top RF Feature Importances:
+   1. deficit               importance=0.0362
+   2. unacceptable          importance=0.0291
+   3. jobs                  importance=0.0272
+   4. irresponsible         importance=0.0264
+   5. concern               importance=0.0256
+   6. improve               importance=0.0254
+   7. harmful               importance=0.0253
+   8. objection             importance=0.0252
+   9. failure               importance=0.0228
+  10. risky                 importance=0.0222
