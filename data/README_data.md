@@ -29,25 +29,30 @@ We focus on **110th–114th Congress (2007–2016)** with **economic bill subjec
    CONGRESS_API_KEY=<your-api-key>
    ```
 
-### Automatic Download (via Notebook 01)
+### Automatic Fetch (via scripts/fetch_real_bills.py)
 
-The data collection notebook (`notebooks/01_data_collection.ipynb`) will automatically:
-- Fetch bill metadata for Congress 110–114
-- Filter to economic bill subjects
-- Determine pass/fail status from `latestAction` field
-- Save to `data/processed/bills_metadata.csv`
+`scripts/fetch_real_bills.py` fetches real bill metadata and determines the
+economic-policy subset in two stages, because the Congress.gov list endpoint
+(`/v3/bill/{congress}/{billType}`) does **not** return `subjects` inline —
+subjects require one call per bill to a separate endpoint, which is too many
+calls to do for every bill in a Congress:
 
-### Manual Download (if needed)
+1. **List + title-keyword prefilter (cheap):** paginate `/v3/bill/{congress}/{billType}`
+   for `hr` and `s`, keep bills whose title matches an economic-keyword regex
+   (tax, tariff, trade, labor, wage, budget, appropriation, fiscal, etc.).
+2. **Official policyArea confirmation (one call per candidate):** for each
+   keyword-matched candidate, call `/v3/bill/{congress}/{billType}/{billNumber}/subjects`
+   and keep it only if the bill's official `policyArea.name` is one of:
+   Taxation, Labor and Employment, Foreign Trade and International Finance,
+   Economics and Public Finance, Finance and Financial Sector, Commerce.
 
-Use the Congress.gov API browser: https://api.congress.gov/v3/bill/110
-
-Key endpoints:
-- `/v3/bill/{congress}/{billType}` - Get bills for a Congress
-- Fields: `congress`, `number`, `type`, `title`, `summaries`, `subjects`, `latestAction`
+Requires `CONGRESS_API_KEY` (see setup above). Caches every API response to
+`data/raw/bills_cache/` so re-runs are cheap and resumable. Saves to
+`data/processed/bills_metadata_real.csv`.
 
 **Pass/Fail Definition:**
 - **PASSED (Y=1):** `latestAction.text` contains "Became Public Law"
-- **FAILED (Y=0):** All others after session end
+- **FAILED (Y=0):** All others
 
 ---
 
@@ -60,36 +65,30 @@ Key endpoints:
    - Data available for Congress 43–114
 
 2. **Select 110th–114th Congress:**
-   - Download JSON for each Congress
-   - Files will be named: `congress_110.json`, `congress_111.json`, etc.
+   - Download the pipe-delimited bulk files for each Congress.
 
 3. **Save to `data/raw/`:**
-   ```bash
-   # Example directory structure:
+   ```
    data/raw/
-   ├── congress_110_speeches.json
-   ├── congress_111_speeches.json
-   ├── congress_112_speeches.json
-   ├── congress_113_speeches.json
-   └── congress_114_speeches.json
+   ├── speeches/speeches_{congress}.txt        # speech_id|speech text
+   ├── descriptions/descr_{congress}.txt       # speech_id metadata (date, chamber, etc.)
+   └── speakermap/{congress}_SpeakerMap.txt    # speech_id -> speaker/party
    ```
 
-### Data Format (Stanford)
+### Data Format (Stanford) — IMPORTANT: no native bill linkage
 
-Each speech record contains:
-```json
-{
-  "speaker": {
-    "name": "John Smith",
-    "party": "D",
-    "state": "CA",
-    "bioguide_id": "S000001"
-  },
-  "date": "2007-01-15",
-  "text": "Mr. Speaker, I rise today to speak about...",
-  "bill_id": "HR123-110"  // May be empty for non-bill speeches
-}
-```
+Each line of `speeches_{congress}.txt` is `speech_id|speech_text`. **The Stanford
+corpus has no `bill_id` field.** It is organized purely by date/speaker; a speech
+is not tagged with which bill (if any) it discusses. Any documentation or code
+that assumes a `bill_id` key in this data is describing a different, bill-linked
+corpus — not what Stanford actually publishes.
+
+This project recovers bill linkage itself via `scripts/link_speeches_to_bills.py`,
+which regex-matches explicit in-text bill citations (e.g. "H.R. 1234", "S. 815")
+against the confirmed economic-bill list from `scripts/fetch_real_bills.py`, and
+keeps only bills with at least one linked speech. See that script's docstring for
+the regex patterns and known limitations (a mention is not proof of substantive
+relevance; nickname-only references like "the Recovery Act" are missed).
 
 ---
 
@@ -149,13 +148,15 @@ The cleaning pipeline in `src/data_utils.py`:
 
 ---
 
-## 6. Size Expectations
+## 6. Final Dataset (Report: April 2026)
 
-**Target dataset after filtering:**
-- ~2,000–5,000 bills
-- ~40–60% pass rate (depends on Congress)
-- 110th Congress (2007–2008): 2,000+ bills
-- 114th Congress (2015–2016): 2,000+ bills
+**Actual merged dataset used in analysis:**
+- **1,133 bills** (110th–114th Congress, 2007–2016)
+- **12.5% pass rate** (142 passed, 991 failed)
+- Economic-policy subject areas only (taxation, labor, trade, budget, appropriations)
+- Bills WITH linked floor speech in Stanford Congressional Record
+
+**Note on pass rate variance:** The unconditional pass rate across all introduced bills varies by Congress (typically 2–10%). However, this analysis is **conditional on bills having observable floor speech**, which is itself a selection process—bills with floor debate are more likely to pass, hence the higher 12.5% observed rate in this linked sample.
 
 **Data size:** ~500 MB–1.5 GB (raw speeches)
 

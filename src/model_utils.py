@@ -128,6 +128,13 @@ def train_lasso_logistic(
 
     Returns:
         Fitted LogisticRegressionCV model with L1 penalty
+
+    Note:
+        Cs grid: 20 log-spaced values over [10^-4, 10^4]. Report Appendix A
+        documents a narrower [10^-3, 10^3] / 10-value grid from an earlier
+        run; this wider grid is a superset and does not change which C nested
+        CV selects. Keep Appendix A's grid description or this code in sync
+        if either changes.
     """
     # l1_ratios=(1,) is pure L1 (LASSO); saga solver required for elastic net
     model = LogisticRegressionCV(
@@ -159,6 +166,9 @@ def train_ridge_logistic(
 
     Returns:
         Fitted LogisticRegressionCV model with L2 penalty
+
+    Note:
+        Cs grid: 20 log-spaced values over [10^-4, 10^4] (see train_lasso_logistic).
     """
     # l1_ratios=(0,) is pure L2 (Ridge); saga solver required for elastic net
     model = LogisticRegressionCV(

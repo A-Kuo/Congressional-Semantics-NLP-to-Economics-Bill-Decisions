@@ -52,9 +52,9 @@ print(f"   Pass rate: {y.mean():.1%}")
 # 2. FEATURE ENGINEERING
 # ============================================================================
 print("\n2. FEATURE ENGINEERING (TF-IDF)...")
-# Data is already tokenized, so use minimal filtering
-vectorizer = TfidfVectorizer(max_features=2000, min_df=1, max_df=1.0,
-                             stop_words=None, lowercase=True)
+# Matches the report's documented config (Appendix A) and src/nlp_utils.create_tfidf_features
+vectorizer = TfidfVectorizer(max_features=5000, min_df=5, max_df=0.95,
+                             stop_words="english", lowercase=True)
 X_tfidf = vectorizer.fit_transform(X_text)
 feature_names = np.array(vectorizer.get_feature_names_out())
 
@@ -160,7 +160,7 @@ for train_idx, test_idx in cv.split(X_tfidf, y):
     })
 
     # ========== LASSO ==========
-    lasso = LogisticRegressionCV(Cs=np.logspace(-2, 2, 3), cv=3, l1_ratios=(1,),
+    lasso = LogisticRegressionCV(Cs=np.logspace(-4, 4, 20), cv=5, l1_ratios=(1,),
                                 solver='saga', max_iter=1000, class_weight='balanced',
                                 scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
     lasso.fit(X_train, y_train)
@@ -180,7 +180,7 @@ for train_idx, test_idx in cv.split(X_tfidf, y):
     })
 
     # ========== RIDGE ==========
-    ridge = LogisticRegressionCV(Cs=np.logspace(-2, 2, 3), cv=3, l1_ratios=(0,),
+    ridge = LogisticRegressionCV(Cs=np.logspace(-4, 4, 20), cv=5, l1_ratios=(0,),
                                 solver='saga', max_iter=1000, class_weight='balanced',
                                 scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
     ridge.fit(X_train, y_train)
@@ -201,7 +201,7 @@ for train_idx, test_idx in cv.split(X_tfidf, y):
     X_dense = X_train.toarray()
     X_test_dense = X_test.toarray()
 
-    rf = RandomForestClassifier(n_estimators=1000, max_features='sqrt',
+    rf = RandomForestClassifier(n_estimators=200, max_features='sqrt',
                                random_state=SEED, class_weight='balanced', n_jobs=-1)
     rf.fit(X_dense, y_train)
 
@@ -282,19 +282,19 @@ lr_final = LogisticRegression(random_state=SEED, max_iter=1000, class_weight='ba
 lr_final.fit(X_tfidf, y)
 lr_final_proba = lr_final.predict_proba(X_tfidf)[:, 1]
 
-lasso_final = LogisticRegressionCV(Cs=np.logspace(-2, 2, 3), cv=3, l1_ratios=(1,),
+lasso_final = LogisticRegressionCV(Cs=np.logspace(-4, 4, 20), cv=5, l1_ratios=(1,),
                                    solver='saga', max_iter=1000, class_weight='balanced',
                                    scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
 lasso_final.fit(X_tfidf, y)
 lasso_final_proba = lasso_final.predict_proba(X_tfidf)[:, 1]
 
-ridge_final = LogisticRegressionCV(Cs=np.logspace(-2, 2, 3), cv=3, l1_ratios=(0,),
+ridge_final = LogisticRegressionCV(Cs=np.logspace(-4, 4, 20), cv=5, l1_ratios=(0,),
                                   solver='saga', max_iter=1000, class_weight='balanced',
                                   scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
 ridge_final.fit(X_tfidf, y)
 ridge_final_proba = ridge_final.predict_proba(X_tfidf)[:, 1]
 
-rf_final = RandomForestClassifier(n_estimators=1000, max_features='sqrt',
+rf_final = RandomForestClassifier(n_estimators=200, max_features='sqrt',
                                  random_state=SEED, class_weight='balanced', n_jobs=-1)
 rf_final.fit(X_tfidf_dense, y)
 rf_final_proba = rf_final.predict_proba(X_tfidf_dense)[:, 1]

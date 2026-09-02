@@ -2,12 +2,16 @@
 End-to-end pipeline runner.
 
 Executes the full modeling pipeline (equivalent to notebooks 02–07) and saves
-all results tables and figures to results/.  Use this to validate the pipeline
-or to re-run analysis without opening Jupyter.
+all results tables and figures to results/. This reproduces the findings from
+"Predicting Congressional Bill Passage from Floor-Speech Language" (April 2026).
+
+DEFAULT: Uses real data from data/processed/bills_speeches_preprocessed.csv
+(1,133 bills, 12.5% pass rate, 110th–114th Congress, economic legislation only).
 
 Usage:
-    python run_pipeline.py [--synthetic]          # use real or synthetic data
-    python run_pipeline.py --synthetic --n 2000   # generate N synthetic bills
+    python run_pipeline.py                        # RECOMMENDED: use real data
+    python run_pipeline.py --synthetic            # test mode: use synthetic data
+    python run_pipeline.py --synthetic --n 500    # test: N synthetic bills
 """
 
 import argparse
@@ -295,7 +299,7 @@ def step6_comparison(models_info: dict, X_tfidf, y) -> pd.DataFrame:
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
-def main(use_synthetic: bool = True, n_synthetic: int = 2000):
+def main(use_synthetic: bool = False, n_synthetic: int = 2000):
     print("=" * 60)
     print("Congressional NLP — Full Pipeline")
     print("=" * 60)
@@ -340,14 +344,16 @@ def main(use_synthetic: bool = True, n_synthetic: int = 2000):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--synthetic", action="store_true", default=True,
-                        help="Use synthetic data (default: True)")
-    parser.add_argument("--real", action="store_true",
-                        help="Use real data from data/processed/")
+    parser = argparse.ArgumentParser(
+        description="Run the full congressional bill prediction pipeline.\n"
+                    "Default: uses real data from data/processed/ (reproduces report findings).\n"
+                    "Use --synthetic to run on synthetic data for testing."
+    )
+    parser.add_argument("--synthetic", action="store_true", default=False,
+                        help="Use synthetic data for testing (default: False, uses real data)")
     parser.add_argument("--n", type=int, default=2000,
-                        help="Number of synthetic bills to generate")
+                        help="Number of synthetic bills to generate (only with --synthetic)")
     args = parser.parse_args()
 
-    use_synthetic = not args.real
+    use_synthetic = args.synthetic
     main(use_synthetic=use_synthetic, n_synthetic=args.n)
