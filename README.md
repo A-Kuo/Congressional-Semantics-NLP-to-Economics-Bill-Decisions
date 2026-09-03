@@ -13,7 +13,18 @@ This project combines NLP (TF-IDF, BERT) with econometric and machine learning m
 **Type:** Predictive (not causal)  
 **Y (outcome):** Bill pass/fail (binary: 1 = enacted into law, 0 = failed/died)  
 **X (features):** TF-IDF word frequencies from aggregated floor speeches  
-**Scope:** 1,133 bills (110th–114th Congress, 2007–2016); economic legislation only; 12.5% pass rate
+**Scope:** 1,120 bills (110th–114th Congress, 2007–2016); economic legislation only; 6.8% pass rate (76 passed)
+
+This is the real, reproducible sample this repository's pipeline produces end-to-end
+(`scripts/fetch_real_bills.py` → `scripts/link_speeches_to_bills.py` →
+`scripts/build_merged_dataset.py` → `run_pipeline.py`), verified against Congress.gov
+and the Stanford Congressional Record corpus on 2026-09-02. It differs from the
+1,133-bill / 12.5%-pass-rate sample described in earlier report drafts, because the
+Stanford corpus has no native bill-ID field — bills are linked to speeches here via
+regex-matched in-text citations ("H.R. 1234", "S. 815"), a real but different (and
+broader/noisier) method than whatever produced the original sample. See
+`report/results_real_data.tex` for the full real-data Results section and
+`data/README_data.md` for the linkage methodology.
 
 ## Repository Structure
 
@@ -73,24 +84,29 @@ on each stage.
 - HR (House bills) and S (Senate bills)  
 - Subjects: "Taxation", "Labor and Employment", "Trade", "Economics and Public Finance", "Budget and Appropriations"
 
-## Methods Pipeline (Report: April 2026)
+## Methods Pipeline
 
 **Primary Analysis (TF-IDF + Classical ML):**
-All models use TF-IDF features (5,000 max features, min_df=5, max_df=0.95) with 5-fold stratified cross-validation.
+All models use TF-IDF features (5,000 max features, min_df=5, max_df=0.95) with 5-fold stratified cross-validation. Numbers below are from this repo's real pipeline output (`results/tables/model_comparison.csv`, `results/statistical_analysis/`), run 2026-09-02 on the 1,120-bill real sample described above.
 
 ### 1. **Baseline: Logistic Regression**
-- Linear benchmark for interpretability  
-- Metrics: accuracy, AUC-ROC (mean test AUC: 0.897)
+- Linear benchmark for interpretability
+- Mean test AUC: 0.919 (train AUC 0.996 — large train–test gap)
 
 ### 2. **Regularization: LASSO + Ridge**
-- LASSO: sparse feature selection (mean test AUC: 0.843)
-- Ridge: dense shrinkage under correlated features (mean test AUC: 0.889)
-- Top-selected procedural terms: *consent*, *suspend*, *unanimous*, *ordered*
+- LASSO: sparse feature selection (mean test AUC: 0.918); only 2 of the top-20
+  coefficients are statistically significant at p<0.05 given the small (76-bill)
+  positive class — most top-magnitude words are not distinguishable from noise
+- Ridge: dense shrinkage under correlated features (mean test AUC: 0.929)
+- Top procedural terms still selected: *senate*, *suspend*, *passage*, *house*
 
 ### 3. **Ensemble: Random Forest**
 - 200 trees, sqrt(5000) features per split, default depth
-- Highest cross-validated AUC (0.958) but largest train–test gap (0.107)
-- Mean test AUC: 0.958 ± larger generalization gap than linear models
+- Highest cross-validated AUC (0.963); smallest RMSE train–test gap of the four
+  models here (unlike the original report, where RF had the largest gap — see
+  `report/results_real_data.tex` for discussion)
+- Top features: *motion*, *suspend*, *proceed*, *senate*, *consent*, *unanimous*,
+  *rules* — closely reproduces the procedural-language finding
 
 ### 4. **Transformer Models (Not in Report)**
 - BERT notebook 06 exists for reference but **not used in final analysis**

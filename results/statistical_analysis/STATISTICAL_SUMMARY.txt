@@ -6,108 +6,108 @@ Congressional Bill Passage Prediction - Phase 1 Enhancement
 TEST 1: P-VALUES FOR COEFFICIENTS
 --------------------------------------------------------------------------------
 Logistic: 0/2000 significant coefficients (p<0.05)
-LASSO: 44/50 significant non-zero coefficients (p<0.05)
+LASSO: 4/122 significant non-zero coefficients (p<0.05)
 Ridge: 0/2000 significant coefficients (p<0.05)
 
 TEST 2: 95% CONFIDENCE INTERVALS FOR AUC
 --------------------------------------------------------------------------------
-Logistic: AUC = 1.0000 [95% CI: 1.0000-1.0000]
-LASSO: AUC = 1.0000 [95% CI: 1.0000-1.0000]
-Ridge: AUC = 1.0000 [95% CI: 1.0000-1.0000]
-RF: AUC = 1.0000 [95% CI: 1.0000-1.0000]
+Logistic: AUC = 0.9148 [95% CI: 0.8868-0.9428]
+LASSO: AUC = 0.9073 [95% CI: 0.8913-0.9233]
+Ridge: AUC = 0.9227 [95% CI: 0.9107-0.9348]
+RF: AUC = 0.9554 [95% CI: 0.9396-0.9711]
 
 TEST 3: PAIRED T-TEST FOR MODEL COMPARISON
 --------------------------------------------------------------------------------
     Comparison Mean Diff AUC     SE T-Stat P-Value Significant
-RF vs Logistic       -0.0000 0.0000  -1.00  0.3739           ✗
-   RF vs LASSO       -0.0000 0.0000  -1.00  0.3739           ✗
-   RF vs Ridge       -0.0000 0.0000  -1.00  0.3739           ✗
+RF vs Logistic        0.0406 0.0083   4.88  0.0082          ✓✓
+   RF vs LASSO        0.0481 0.0117   4.10  0.0149           ✓
+   RF vs Ridge        0.0326 0.0098   3.33  0.0291           ✓
 
 TEST 4: PER-FOLD BREAKDOWN
 --------------------------------------------------------------------------------
 
 Logistic:
-   Fold 1: 1.0000
-   Fold 2: 1.0000
-   Fold 3: 1.0000
-   Fold 4: 1.0000
-   Fold 5: 1.0000
-   Mean:   1.0000 ± 0.0000
+   Fold 1: 0.8884
+   Fold 2: 0.9640
+   Fold 3: 0.8727
+   Fold 4: 0.9279
+   Fold 5: 0.9210
+   Mean:   0.9148 ± 0.0319
 
 LASSO:
-   Fold 1: 1.0000
-   Fold 2: 1.0000
-   Fold 3: 1.0000
-   Fold 4: 1.0000
-   Fold 5: 1.0000
-   Mean:   1.0000 ± 0.0000
+   Fold 1: 0.8826
+   Fold 2: 0.8979
+   Fold 3: 0.8998
+   Fold 4: 0.9231
+   Fold 5: 0.9330
+   Mean:   0.9073 ± 0.0182
 
 Ridge:
-   Fold 1: 1.0000
-   Fold 2: 1.0000
-   Fold 3: 1.0000
-   Fold 4: 1.0000
-   Fold 5: 1.0000
-   Mean:   1.0000 ± 0.0000
+   Fold 1: 0.9260
+   Fold 2: 0.9107
+   Fold 3: 0.9056
+   Fold 4: 0.9445
+   Fold 5: 0.9270
+   Mean:   0.9227 ± 0.0137
 
 RF:
-   Fold 1: 1.0000
-   Fold 2: 0.9999
-   Fold 3: 1.0000
-   Fold 4: 1.0000
-   Fold 5: 1.0000
-   Mean:   1.0000 ± 0.0000
+   Fold 1: 0.9427
+   Fold 2: 0.9815
+   Fold 3: 0.9343
+   Fold 4: 0.9713
+   Fold 5: 0.9470
+   Mean:   0.9554 ± 0.0179
 
 TEST 5: REGRESSION METRICS
 --------------------------------------------------------------------------------
-   Model AUC-ROC       AUC 95% CI Accuracy Precision Recall     F1    MAE   RMSE     R²
-Logistic  1.0000 [1.0000, 1.0000]   1.0000    1.0000 1.0000 1.0000 0.2020 0.2035 0.8326
-   LASSO  1.0000 [1.0000, 1.0000]   1.0000    1.0000 1.0000 1.0000 0.0613 0.0638 0.9836
-   Ridge  1.0000 [1.0000, 1.0000]   1.0000    1.0000 1.0000 1.0000 0.4915 0.4915 0.0240
-      RF  1.0000 [1.0000, 1.0000]   0.9975    1.0000 0.9944 0.9972 0.1014 0.1068 0.9539
+   Model AUC-ROC       AUC 95% CI Accuracy Precision Recall     F1    MAE   RMSE      R²
+Logistic  0.9148 [0.8868, 0.9428]   0.9107    0.4000 0.5000 0.4444 0.1998 0.2528 -0.0106
+   LASSO  0.9073 [0.8913, 0.9233]   0.9286    0.5000 0.5000 0.5000 0.0350 0.0984  0.8470
+   Ridge  0.9227 [0.9107, 0.9348]   0.9330    0.5385 0.4375 0.4828 0.0257 0.0671  0.9288
+      RF  0.9554 [0.9396, 0.9711]   0.9375    1.0000 0.1250 0.2222 0.0344 0.0741  0.9133
 
 TEST 6: BIAS-VARIANCE ANALYSIS
 --------------------------------------------------------------------------------
-   Model Train AUC Test AUC Overfitting  Status
-Logistic    1.0000   1.0000      0.0000 MINIMAL
-   LASSO    1.0000   1.0000      0.0000 MINIMAL
-   Ridge    1.0000   1.0000      0.0000 MINIMAL
-      RF    1.0000   1.0000      0.0000 MINIMAL
+   Model Train AUC Test AUC Overfitting Status
+Logistic    0.9954   0.9148      0.0806   HIGH
+   LASSO    0.9991   0.9073      0.0918   HIGH
+   Ridge    1.0000   0.9227      0.0773   HIGH
+      RF    1.0000   0.9554      0.0446   HIGH
 
 FEATURE ANALYSIS: TOP SIGNIFICANT PREDICTORS
 --------------------------------------------------------------------------------
 Research Question: Which words predict bill passage/failure?
 
 Top LASSO features (by coefficient magnitude, with p-values):
-   1. deficit               coef=-9.1502  p=0.0022 **    → predicts FAIL
-   2. harmful               coef=-9.0600  p=0.0013 **    → predicts FAIL
-   3. unacceptable          coef=-8.5716  p=0.0020 **    → predicts FAIL
-   4. reject                coef=-8.5309  p=0.0014 **    → predicts FAIL
-   5. oppose                coef=-8.2766  p=0.0036 **    → predicts FAIL
-   6. failure               coef=-8.2439  p=0.0042 **    → predicts FAIL
-   7. concern               coef=-8.1370  p=0.0044 **    → predicts FAIL
-   8. irresponsible         coef=-8.0746  p=0.0039 **    → predicts FAIL
-   9. flawed                coef=-8.0656  p=0.0037 **    → predicts FAIL
-  10. objection             coef=-7.9615  p=0.0038 **    → predicts FAIL
-  11. jobs                  coef=+7.9612  p=0.0010 **    → predicts PASS
-  12. burden                coef=-7.9141  p=0.0052 **    → predicts FAIL
-  13. costly                coef=-7.9098  p=0.0057 **    → predicts FAIL
-  14. wasteful              coef=-7.8890  p=0.0036 **    → predicts FAIL
-  15. unsustainable         coef=-7.6982  p=0.0059 **    → predicts FAIL
-  16. risky                 coef=-7.6220  p=0.0077 **    → predicts FAIL
-  17. partisan              coef=-7.2862  p=0.0050 **    → predicts FAIL
-  18. controversial         coef=-7.2230  p=0.0093 **    → predicts FAIL
-  19. divisive              coef=-7.1242  p=0.0121 *     → predicts FAIL
-  20. dangerous             coef=-7.0309  p=0.0105 *     → predicts FAIL
+   1. support               coef=+32.4929  p=0.0003 ***   → predicts PASS
+   2. ira                   coef=+30.6982  p=0.7403 n.s.  → predicts PASS
+   3. enrolled              coef=+30.3782  p=0.4588 n.s.  → predicts PASS
+   4. wisconsin             coef=+23.0977  p=0.6754 n.s.  → predicts PASS
+   5. extension             coef=+22.1308  p=0.2450 n.s.  → predicts PASS
+   6. passage               coef=+21.2835  p=0.3005 n.s.  → predicts PASS
+   7. programs              coef=+18.4104  p=0.0567 n.s.  → predicts PASS
+   8. senate                coef=+16.7294  p=0.0307 *     → predicts PASS
+   9. samoa                 coef=+15.7635  p=0.9205 n.s.  → predicts PASS
+  10. quarterly             coef=+15.7287  p=0.7423 n.s.  → predicts PASS
+  11. countervailing        coef=+13.5804  p=0.6662 n.s.  → predicts PASS
+  12. signed                coef=+13.5802  p=0.3929 n.s.  → predicts PASS
+  13. designate             coef=+13.5754  p=0.5795 n.s.  → predicts PASS
+  14. technical             coef=+13.5594  p=0.4906 n.s.  → predicts PASS
+  15. trust                 coef=+12.6651  p=0.3649 n.s.  → predicts PASS
+  16. suspend               coef=+12.4186  p=0.3004 n.s.  → predicts PASS
+  17. december              coef=+12.3133  p=0.4897 n.s.  → predicts PASS
+  18. haiti                 coef=+12.1045  p=0.7772 n.s.  → predicts PASS
+  19. house                 coef=+11.9986  p=0.0957 n.s.  → predicts PASS
+  20. fund                  coef=+11.6786  p=0.4211 n.s.  → predicts PASS
 
 Top RF Feature Importances:
-   1. deficit               importance=0.0362
-   2. unacceptable          importance=0.0291
-   3. jobs                  importance=0.0272
-   4. irresponsible         importance=0.0264
-   5. concern               importance=0.0256
-   6. improve               importance=0.0254
-   7. harmful               importance=0.0253
-   8. objection             importance=0.0252
-   9. failure               importance=0.0228
-  10. risky                 importance=0.0222
+   1. motion                importance=0.0288
+   2. suspend               importance=0.0214
+   3. proceed               importance=0.0212
+   4. senate                importance=0.0207
+   5. consent               importance=0.0179
+   6. unanimous             importance=0.0170
+   7. ask                   importance=0.0162
+   8. rules                 importance=0.0146
+   9. gentleman             importance=0.0139
+  10. pass                  importance=0.0138

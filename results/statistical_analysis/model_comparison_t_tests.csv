@@ -1,4 +1,4 @@
 Comparison,Mean Diff AUC,SE,T-Stat,P-Value,Significant
-RF vs Logistic,-0.0000,0.0000,-1.00,0.3739,✗
-RF vs LASSO,-0.0000,0.0000,-1.00,0.3739,✗
-RF vs Ridge,-0.0000,0.0000,-1.00,0.3739,✗
+RF vs Logistic,0.0406,0.0083,4.88,0.0082,✓✓
+RF vs LASSO,0.0481,0.0117,4.10,0.0149,✓
+RF vs Ridge,0.0326,0.0098,3.33,0.0291,✓

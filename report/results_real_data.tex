@@ -1,0 +1,71 @@
+% Results section rebuilt from the repository's actual real-data pipeline.
+% Source: scripts/fetch_real_bills.py -> scripts/link_speeches_to_bills.py ->
+%         scripts/build_merged_dataset.py -> run_pipeline.py / statistical_rigor_analysis.py
+% Run date: 2026-09-02. Sample: 1,120 bills (76 passed, 6.8%), 110th-114th Congress.
+%
+% IMPORTANT: this sample differs from the 1,133-bill / 12.5%-pass-rate sample
+% described in the current Data section (Section 2) of the report. The bill
+% universe and pass/fail labels are real (Congress.gov API, verified against
+% known bills), and the floor-speech linkage is real (regex-matched explicit
+% "H.R. ####" / "S. ####" citations against the real Stanford Congressional
+% Record corpus) -- but this regex-mention linkage is a different, broader
+% method than whatever produced the original 1,133/12.5% sample (that number
+% traces to the Kaggle notebook cited in Appendix A, not to code in this
+% repository). If Section 2 is not being rewritten at the same time, at
+% minimum its sample statistics need updating so the Data and Results
+% sections describe the same corpus.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Cross-Validated Performance}
+
+Table \ref{tab:model_performance} reports mean performance across five stratified folds on the real linked sample (1,120 bills; 76 passed, 6.8\%). All models achieve AUC values well above 0.5, indicating that floor-speech features contain substantial within-period ranking information about bill passage.
+
+The random forest again achieves the highest mean test AUC (0.963) and lowest test RMSE (0.200). Unlike the earlier synthetic-adjacent run, however, the random forest does \emph{not} show the largest AUC train--test gap here -- Ridge and LASSO show larger RMSE gaps (0.176 and 0.125 respectively) than the random forest (0.126) or logistic regression (0.038). This is a materially different generalization pattern than a linear-models-generalize-better narrative would predict, and is consistent with the much smaller positive class in this sample (76 passed bills, versus 142 in the original 1,133-bill sample) making the L1/L2-regularized linear models more prone to fitting idiosyncratic vocabulary specific to a handful of passed bills.
+
+\begin{table}[htbp]
+\centering
+\caption{Mean cross-validated performance across five stratified folds, real Congress.gov + Stanford Congressional Record data (110th--114th Congress, regex-linked sample, $n=1{,}120$). Results describe internal validation and do not establish out-of-time generalization.}
+\label{tab:model_performance}
+\vspace{0.5em}
+
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Model} & \textbf{Train AUC} & \textbf{Test AUC} &
+\textbf{Train RMSE} & \textbf{Test RMSE} & \textbf{RMSE Gap} \\
+\midrule
+Logistic Regression & 0.996 & 0.919 & 0.252 & 0.290 & 0.038 \\
+LASSO Logistic      & 0.999 & 0.918 & 0.108 & 0.233 & 0.125 \\
+Ridge Logistic      & 1.000 & 0.929 & 0.042 & 0.218 & 0.176 \\
+Random Forest       & 1.000 & 0.963 & 0.074 & 0.200 & 0.126 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A paired bootstrap/t-test comparison (Table \ref{tab:paired_ttest}) confirms the random forest's AUC advantage over every linear model is statistically distinguishable across the five folds, though as in the original analysis this should be read descriptively given the small number of non-independent folds.
+
+\begin{table}[htbp]
+\centering
+\caption{Paired fold-level AUC comparison, random forest vs.\ linear models.}
+\label{tab:paired_ttest}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Comparison} & \textbf{Mean AUC Diff.} & \textbf{$t$} & \textbf{$p$} \\
+\midrule
+RF vs.\ Logistic & 0.041 & 4.88 & 0.008 \\
+RF vs.\ LASSO    & 0.048 & 4.10 & 0.015 \\
+RF vs.\ Ridge    & 0.033 & 3.33 & 0.029 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Feature Interpretation}
+
+The random forest's top-importance features are dominated by procedural floor-action vocabulary: \textit{motion}, \textit{suspend}, \textit{proceed}, \textit{senate}, \textit{consent}, \textit{unanimous}, \textit{ask}, \textit{rules}, \textit{gentleman}, \textit{pass}. This closely reproduces the procedural-language finding from the earlier analysis -- \textit{unanimous}, \textit{consent}, and \textit{suspend} again rank among the strongest predictors of passage.
+
+The LASSO model's top-coefficient features are more mixed: alongside procedural terms (\textit{senate}, \textit{suspend}, \textit{passage}, \textit{house}) it assigns large positive coefficients to topically narrow, idiosyncratic terms (\textit{ira}, \textit{wisconsin}, \textit{samoa}, \textit{haiti}, \textit{countervailing}) that plausibly reflect specific named bills in the small (76-bill) positive class rather than a generalizable passage signal. Computing coefficient-level $p$-values (via the observed-information-matrix approximation) makes this concrete: of the twenty largest-magnitude LASSO coefficients, only \textit{support} ($p<0.001$) and \textit{senate} ($p=0.031$) are statistically significant at the 0.05 level; the rest -- including several of the topically narrow terms above -- are not distinguishable from noise given this sample size. This is a stronger and more direct statement of the instability the original analysis flagged qualitatively (``estimates may be sensitive to particular legislative episodes''); here it is quantified rather than assumed.
+
+\subsection{Nonlinear Patterns}
+
+As in the original analysis, the random forest's higher cross-validated AUC (0.963 vs.\ 0.919 for logistic regression) suggests joint co-occurrence of procedural terms carries information beyond an additive linear score. The paired comparison (Table \ref{tab:paired_ttest}) puts this at a mean AUC improvement of 0.041 over logistic regression ($t=4.88$, $p=0.008$), similar in direction and statistical strength to the original 0.061 improvement ($t=2.87$, $p=0.019$) despite the different underlying sample.

@@ -66,6 +66,27 @@ def get_api_key() -> str:
     raise RuntimeError("CONGRESS_API_KEY not found in environment or .env")
 
 
+def _get_with_retry(url: str, params: dict, timeout: int = 20, max_retries: int = 5):
+    """GET with exponential backoff on timeouts/connection errors/5xx."""
+    for attempt in range(max_retries):
+        try:
+            resp = requests.get(url, params=params, timeout=timeout)
+            if resp.status_code == 429:
+                wait = 5 * (2 ** attempt)
+                print(f"    rate limited (429), backing off {wait}s...")
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp
+        except requests.exceptions.RequestException as e:
+            if attempt == max_retries - 1:
+                raise
+            wait = 2 * (2 ** attempt)
+            print(f"    request failed ({e}), retry {attempt + 1}/{max_retries} in {wait}s...")
+            time.sleep(wait)
+    raise RuntimeError("unreachable")
+
+
 def fetch_bill_list(congress: int, bill_type: str, api_key: str, delay: float = 0.4) -> list:
     """Paginate through all bills of one type for one Congress."""
     cache_path = f"{CACHE_DIR}/list_{congress}_{bill_type}.json"
@@ -78,8 +99,7 @@ def fetch_bill_list(congress: int, bill_type: str, api_key: str, delay: float = 
     offset = 0
     while True:
         params = {"api_key": api_key, "limit": 250, "offset": offset, "format": "json"}
-        resp = requests.get(base_url, params=params, timeout=20)
-        resp.raise_for_status()
+        resp = _get_with_retry(base_url, params, timeout=30)
         data = resp.json()
         bills = data.get("bills", [])
         if not bills:
@@ -107,12 +127,11 @@ def fetch_policy_area(congress: int, bill_type: str, bill_number, api_key: str) 
     url = f"https://api.congress.gov/v3/bill/{congress}/{bill_type}/{bill_number}/subjects"
     params = {"api_key": api_key, "format": "json"}
     try:
-        resp = requests.get(url, params=params, timeout=20)
-        resp.raise_for_status()
+        resp = _get_with_retry(url, params, timeout=30)
         data = resp.json()
         policy_area = data.get("subjects", {}).get("policyArea", {}).get("name")
     except requests.exceptions.RequestException as e:
-        print(f"    WARN: subjects fetch failed for {bill_type}{bill_number}-{congress}: {e}")
+        print(f"    WARN: subjects fetch failed after retries for {bill_type}{bill_number}-{congress}: {e}")
         policy_area = None
 
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -204,27 +223,40 @@ def process_congress(congress: int, api_key: str) -> pd.DataFrame:
     return df
 
 
-def main(congresses: list):
-    api_key = get_api_key()
-    all_dfs = []
-    for c in congresses:
-        df_c = process_congress(c, api_key)
-        all_dfs.append(df_c)
-
-    combined = pd.concat(all_dfs, ignore_index=True) if all_dfs else pd.DataFrame()
+def save_incremental(df_c: pd.DataFrame, congress: int):
+    """Merge one Congress's results into the output CSV immediately, so a
+    crash on a later Congress can never lose an already-completed one."""
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-
-    # merge with any prior run (e.g. pilot congress) instead of clobbering
     if os.path.exists(OUTPUT_PATH):
         prior = pd.read_csv(OUTPUT_PATH)
-        combined = pd.concat([prior, combined], ignore_index=True)
-        combined = combined.drop_duplicates(subset=["bill_id"], keep="last")
-
+        prior = prior[prior["congress"] != congress]  # replace this congress's rows
+        combined = pd.concat([prior, df_c], ignore_index=True)
+    else:
+        combined = df_c
+    combined = combined.drop_duplicates(subset=["bill_id"], keep="last")
     combined = combined.sort_values(["congress", "bill_type", "bill_number"])
     combined.to_csv(OUTPUT_PATH, index=False)
-    print(f"\nSaved {len(combined)} economic bills -> {OUTPUT_PATH}")
-    print(f"Overall pass rate: {combined['passed'].mean():.1%}")
-    print(combined.groupby("congress")["passed"].agg(["count", "mean"]))
+    print(f"  Saved (cumulative {len(combined)} bills) -> {OUTPUT_PATH}")
+
+
+def main(congresses: list):
+    api_key = get_api_key()
+    for c in congresses:
+        try:
+            df_c = process_congress(c, api_key)
+            if not df_c.empty:
+                save_incremental(df_c, c)
+        except Exception as e:
+            print(f"  ERROR: Congress {c} failed after retries, skipping: {e}")
+            continue
+
+    if os.path.exists(OUTPUT_PATH):
+        combined = pd.read_csv(OUTPUT_PATH)
+        print(f"\nFinal: {len(combined)} economic bills -> {OUTPUT_PATH}")
+        print(f"Overall pass rate: {combined['passed'].mean():.1%}")
+        print(combined.groupby("congress")["passed"].agg(["count", "mean"]))
+    else:
+        print("\nNo bills collected.")
 
 
 if __name__ == "__main__":

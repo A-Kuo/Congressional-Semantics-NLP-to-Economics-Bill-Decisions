@@ -148,15 +148,32 @@ The cleaning pipeline in `src/data_utils.py`:
 
 ---
 
-## 6. Final Dataset (Report: April 2026)
+## 6. Final Dataset (this repo's real pipeline, run 2026-09-02)
 
-**Actual merged dataset used in analysis:**
-- **1,133 bills** (110th–114th Congress, 2007–2016)
-- **12.5% pass rate** (142 passed, 991 failed)
-- Economic-policy subject areas only (taxation, labor, trade, budget, appropriations)
-- Bills WITH linked floor speech in Stanford Congressional Record
+**Actual merged dataset produced by `scripts/build_merged_dataset.py`:**
+- **1,120 bills** (110th–114th Congress, 2007–2016)
+- **6.8% pass rate** (76 passed, 1,044 failed)
+- Economic-policy subject areas only, confirmed via Congress.gov's official `policyArea`
+  (Taxation, Labor and Employment, Foreign Trade and International Finance, Economics
+  and Public Finance, Finance and Financial Sector, Commerce)
+- Bills with ≥1 linked floor speech, where linkage = a regex-matched explicit in-text
+  citation ("H.R. 1234", "S. 815") in the raw Stanford Congressional Record text —
+  see `scripts/link_speeches_to_bills.py`
 
-**Note on pass rate variance:** The unconditional pass rate across all introduced bills varies by Congress (typically 2–10%). However, this analysis is **conditional on bills having observable floor speech**, which is itself a selection process—bills with floor debate are more likely to pass, hence the higher 12.5% observed rate in this linked sample.
+An earlier report draft cites 1,133 bills / 12.5% pass rate for this same scope; that
+number traces to the Kaggle notebook in Appendix A, not to code in this repository.
+The two samples aren't expected to match exactly: this pipeline's speech-mention
+regex is a real but different (broader/noisier) linkage method than whatever
+produced that number. See `report/results_real_data.tex` for the full real-data
+Results section.
+
+**Note on pass rate:** The unconditional pass rate across all 8,529 economic bills
+this repo fetched from Congress.gov is ~0.9% (see `data/processed/bills_metadata_real.csv`).
+Conditioning on having a linked floor speech raises it to 6.8% — bills with floor
+debate are more likely to pass, the selection effect the report's Data section
+describes, just at a lower conditional rate than the original 12.5% since this
+linkage method is broader (picks up passing procedural mentions, not just
+substantive debate).
 
 **Data size:** ~500 MB–1.5 GB (raw speeches)
 

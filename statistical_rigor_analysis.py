@@ -24,6 +24,8 @@ from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     mean_absolute_error, mean_squared_error, r2_score
 )
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend: avoids plt.show() hanging/crashing headless runs
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -160,8 +162,8 @@ for train_idx, test_idx in cv.split(X_tfidf, y):
     })
 
     # ========== LASSO ==========
-    lasso = LogisticRegressionCV(Cs=np.logspace(-4, 4, 20), cv=5, l1_ratios=(1,),
-                                solver='saga', max_iter=1000, class_weight='balanced',
+    lasso = LogisticRegressionCV(Cs=np.logspace(-3, 3, 10), cv=5, l1_ratios=(1,),
+                                solver='liblinear', max_iter=2000, class_weight='balanced',
                                 scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
     lasso.fit(X_train, y_train)
 
@@ -180,8 +182,8 @@ for train_idx, test_idx in cv.split(X_tfidf, y):
     })
 
     # ========== RIDGE ==========
-    ridge = LogisticRegressionCV(Cs=np.logspace(-4, 4, 20), cv=5, l1_ratios=(0,),
-                                solver='saga', max_iter=1000, class_weight='balanced',
+    ridge = LogisticRegressionCV(Cs=np.logspace(-3, 3, 10), cv=5, l1_ratios=(0,),
+                                solver='liblinear', max_iter=2000, class_weight='balanced',
                                 scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
     ridge.fit(X_train, y_train)
 
@@ -282,14 +284,14 @@ lr_final = LogisticRegression(random_state=SEED, max_iter=1000, class_weight='ba
 lr_final.fit(X_tfidf, y)
 lr_final_proba = lr_final.predict_proba(X_tfidf)[:, 1]
 
-lasso_final = LogisticRegressionCV(Cs=np.logspace(-4, 4, 20), cv=5, l1_ratios=(1,),
-                                   solver='saga', max_iter=1000, class_weight='balanced',
+lasso_final = LogisticRegressionCV(Cs=np.logspace(-3, 3, 10), cv=5, l1_ratios=(1,),
+                                   solver='liblinear', max_iter=2000, class_weight='balanced',
                                    scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
 lasso_final.fit(X_tfidf, y)
 lasso_final_proba = lasso_final.predict_proba(X_tfidf)[:, 1]
 
-ridge_final = LogisticRegressionCV(Cs=np.logspace(-4, 4, 20), cv=5, l1_ratios=(0,),
-                                  solver='saga', max_iter=1000, class_weight='balanced',
+ridge_final = LogisticRegressionCV(Cs=np.logspace(-3, 3, 10), cv=5, l1_ratios=(0,),
+                                  solver='liblinear', max_iter=2000, class_weight='balanced',
                                   scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
 ridge_final.fit(X_tfidf, y)
 ridge_final_proba = ridge_final.predict_proba(X_tfidf)[:, 1]
@@ -504,7 +506,7 @@ print("All statistical tests completed successfully!")
 print("="*80)
 
 # Save summary as text
-with open('results/statistical_analysis/STATISTICAL_SUMMARY.txt', 'w') as f:
+with open('results/statistical_analysis/STATISTICAL_SUMMARY.txt', 'w', encoding='utf-8') as f:
     f.write("="*80 + "\n")
     f.write("STATISTICAL RIGOR ANALYSIS SUMMARY\n")
     f.write("Congressional Bill Passage Prediction - Phase 1 Enhancement\n")
