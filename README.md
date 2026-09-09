@@ -87,7 +87,7 @@ on each stage.
 ## Methods Pipeline
 
 **Primary Analysis (TF-IDF + Classical ML):**
-All models use TF-IDF features (5,000 max features, min_df=5, max_df=0.95) with 5-fold stratified cross-validation. Numbers below are from this repo's real pipeline output (`results/tables/model_comparison.csv`, `results/statistical_analysis/`), run 2026-09-02 on the 1,120-bill real sample described above.
+All models are TF-IDF -> classifier `sklearn` Pipelines (5,000 max features, min_df=5, max_df=0.95), cross-validated on raw text with 5-fold stratified CV so the vectorizer refits fresh on each training fold (see Known Limitation (Fixed) below). Numbers below are from this repo's real pipeline output (`results/tables/model_comparison.csv`, `results/statistical_analysis/`), run 2026-09-08 on the 1,120-bill real sample described above.
 
 ### 1. **Baseline: Logistic Regression**
 - Linear benchmark for interpretability
@@ -97,12 +97,12 @@ All models use TF-IDF features (5,000 max features, min_df=5, max_df=0.95) with 
 - LASSO: sparse feature selection (mean test AUC: 0.918); only 2 of the top-20
   coefficients are statistically significant at p<0.05 given the small (76-bill)
   positive class — most top-magnitude words are not distinguishable from noise
-- Ridge: dense shrinkage under correlated features (mean test AUC: 0.929)
+- Ridge: dense shrinkage under correlated features (mean test AUC: 0.928)
 - Top procedural terms still selected: *senate*, *suspend*, *passage*, *house*
 
 ### 3. **Ensemble: Random Forest**
 - 200 trees, sqrt(5000) features per split, default depth
-- Highest cross-validated AUC (0.963); smallest RMSE train–test gap of the four
+- Highest cross-validated AUC (0.955); smallest RMSE train–test gap of the four
   models here (unlike the original report, where RF had the largest gap — see
   `report/results_real_data.tex` for discussion)
 - Top features: *motion*, *suspend*, *proceed*, *senate*, *consent*, *unanimous*,
@@ -112,6 +112,43 @@ All models use TF-IDF features (5,000 max features, min_df=5, max_df=0.95) with 
 - BERT notebook 06 exists for reference but **not used in final analysis**
 - Report notes: "Transformer models may be valuable extensions" (Section 5.2)
 - Future work: evaluate with temporal splits and calibration metrics
+
+### Is This Real Signal? Leakage Audit + Generalization Tests
+
+Reported AUCs of 0.92–0.96 are high enough to warrant checking for leakage or
+overfitting before calling this reproducible. Two things were done:
+
+- **Known Limitation (Fixed):** the pipeline originally fit `TfidfVectorizer`
+  once on the full 1,120-bill corpus *before* cross-validation (in both
+  `run_pipeline.py` and `statistical_rigor_analysis.py`), leaking held-out
+  test-fold document-frequency statistics into the training feature space.
+  Fixed by wrapping every model as a TF-IDF -> classifier `Pipeline`
+  (`src/model_utils.build_*_pipeline`) cross-validated on raw text, so the
+  vectorizer refits per training fold. **Effect: AUCs moved by at most 0.008**
+  (Random Forest 0.963 → 0.955; others within 0.001–0.011) — this leakage path
+  was not the main driver of the scores.
+- **Permutation test** (`scripts/permutation_test.py`): shuffles labels and
+  repeats cross-validation to build a null AUC distribution per model. True
+  AUCs sit far outside their null bands (null distributions center on ~0.50,
+  as expected under no signal) — see `results/statistical_analysis/permutation_test_results.csv`
+  and `results/figures/permutation_null_distribution.png`.
+- **Leave-one-Congress-out** (`scripts/loco_generalization.py`): trains on 4
+  Congresses, tests on the 5th entirely unseen one, repeated per Congress —
+  the pooled 5-fold CV above still draws test folds from sessions the model
+  has seen elsewhere in training. Results (`results/tables/loco_generalization.csv`):
+
+  | Model | Pooled CV AUC | LOCO Mean AUC (Std.) | Drop |
+  |---|---|---|---|
+  | Random Forest | 0.955 | 0.940 (0.041) | 0.015 |
+  | Ridge | 0.928 | 0.909 (0.039) | 0.019 |
+  | Logistic | 0.919 | 0.890 (0.053) | 0.029 |
+  | LASSO | 0.918 | 0.877 (0.085) | 0.042 |
+
+  Every model retains AUC > 0.85 on a Congressional session it never trained
+  on; Random Forest (best model) also generalizes best (smallest drop).
+
+See `report/results_real_data.tex` Section "Is This Leakage or Real Signal?"
+for the full writeup, including permutation-test p-values.
 
 ## Quick Start
 

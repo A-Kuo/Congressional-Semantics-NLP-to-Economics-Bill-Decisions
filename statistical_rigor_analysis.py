@@ -29,6 +29,9 @@ matplotlib.use("Agg")  # non-interactive backend: avoids plt.show() hanging/cras
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+sys.path.insert(0, ".")
+from src import model_utils  # shared TF-IDF/model hyperparameter config (single source of truth)
+
 warnings.filterwarnings('ignore')
 SEED = 42
 np.random.seed(SEED)
@@ -51,12 +54,16 @@ print(f"   Loaded {len(df)} bills")
 print(f"   Pass rate: {y.mean():.1%}")
 
 # ============================================================================
-# 2. FEATURE ENGINEERING
+# 2. FEATURE ENGINEERING (full-corpus fit -- INTERPRETATION ONLY, see note)
 # ============================================================================
 print("\n2. FEATURE ENGINEERING (TF-IDF)...")
+print("   NOTE: this full-corpus vectorizer fit is used ONLY in Section 7 for")
+print("   full-sample coefficient interpretation (p-values, top-feature tables).")
+print("   It is NEVER used for the held-out CV loop below (Section 4), which")
+print("   refits a fresh vectorizer per training fold to avoid leaking test-fold")
+print("   document-frequency statistics into training features.")
 # Matches the report's documented config (Appendix A) and src/nlp_utils.create_tfidf_features
-vectorizer = TfidfVectorizer(max_features=5000, min_df=5, max_df=0.95,
-                             stop_words="english", lowercase=True)
+vectorizer = TfidfVectorizer(**model_utils.TFIDF_KWARGS)
 X_tfidf = vectorizer.fit_transform(X_text)
 feature_names = np.array(vectorizer.get_feature_names_out())
 
@@ -68,6 +75,24 @@ print(f"   Sparsity: {1 - (X_tfidf.nnz / (X_tfidf.shape[0] * X_tfidf.shape[1])):
 # ============================================================================
 print("\n3. SETTING UP CROSS-VALIDATION...")
 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
+
+
+def _fresh_clf(name):
+    """
+    Fresh, unfit bare estimator matching src/model_utils.py's shared config,
+    extracted from its build_*_pipeline() functions so hyperparameters (Cs
+    grid, solver, class_weight, n_estimators, etc.) live in exactly one place
+    instead of being hardcoded a second/third time in this script.
+    """
+    builders = {
+        "Logistic": model_utils.build_logistic_pipeline,
+        "LASSO": model_utils.build_lasso_pipeline,
+        "Ridge": model_utils.build_ridge_pipeline,
+        "RF": lambda random_state: model_utils.build_random_forest_pipeline(
+            n_estimators=200, random_state=random_state),
+    }
+    return builders[name](random_state=SEED).named_steps["clf"]
+
 
 # ============================================================================
 # HELPER FUNCTION 1: Compute Standard Errors for Coefficients (Logistic)
@@ -124,9 +149,12 @@ def compute_all_metrics(y_true, y_pred_prob, y_pred_binary=None):
     }
 
 # ============================================================================
-# 4. TRAIN MODELS & COMPUTE STATISTICS
+# 4. TRAIN MODELS & COMPUTE STATISTICS (leak-free: TF-IDF refit per fold)
 # ============================================================================
 print("\n4. TRAINING MODELS & COMPUTING STATISTICS...\n")
+print("   Fitting a fresh TfidfVectorizer on each fold's TRAINING text only")
+print("   (not the full-corpus vectorizer from Section 2) to avoid leaking")
+print("   test-fold document frequencies into the training feature space.\n")
 
 results_by_fold = {
     'Logistic': {'folds': []},
@@ -135,22 +163,32 @@ results_by_fold = {
     'RF': {'folds': []},
 }
 
+# Out-of-fold predictions, aligned to original row order -- used for Section 7's
+# held-out regression metrics (MAE/RMSE/R²) instead of an in-sample full-fit,
+# the manual equivalent of sklearn's cross_val_predict.
+oof_proba = {name: np.zeros(len(y), dtype=float) for name in results_by_fold}
+
 results_summary = []
 
 fold_idx = 0
-for train_idx, test_idx in cv.split(X_tfidf, y):
+for train_idx, test_idx in cv.split(X_text, y):
     fold_idx += 1
     print(f"   Fold {fold_idx}/5...")
 
-    X_train, X_test = X_tfidf[train_idx], X_tfidf[test_idx]
+    # Fresh, fold-local TF-IDF fit: vocabulary/IDF weights come only from this
+    # fold's training text, never from held-out test text.
+    fold_vectorizer = TfidfVectorizer(**model_utils.TFIDF_KWARGS)
+    X_train = fold_vectorizer.fit_transform(X_text[train_idx])
+    X_test = fold_vectorizer.transform(X_text[test_idx])
     y_train, y_test = y[train_idx], y[test_idx]
 
     # ========== LOGISTIC REGRESSION ==========
-    lr = LogisticRegression(random_state=SEED, max_iter=1000, class_weight='balanced')
+    lr = _fresh_clf('Logistic')
     lr.fit(X_train, y_train)
 
     y_train_pred_prob = lr.predict_proba(X_train)[:, 1]
     y_test_pred_prob = lr.predict_proba(X_test)[:, 1]
+    oof_proba['Logistic'][test_idx] = y_test_pred_prob
 
     train_metrics = compute_all_metrics(y_train, y_train_pred_prob)
     test_metrics = compute_all_metrics(y_test, y_test_pred_prob)
@@ -162,13 +200,12 @@ for train_idx, test_idx in cv.split(X_tfidf, y):
     })
 
     # ========== LASSO ==========
-    lasso = LogisticRegressionCV(Cs=np.logspace(-3, 3, 10), cv=5, l1_ratios=(1,),
-                                solver='liblinear', max_iter=2000, class_weight='balanced',
-                                scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
+    lasso = _fresh_clf('LASSO')
     lasso.fit(X_train, y_train)
 
     y_train_pred_prob = lasso.predict_proba(X_train)[:, 1]
     y_test_pred_prob = lasso.predict_proba(X_test)[:, 1]
+    oof_proba['LASSO'][test_idx] = y_test_pred_prob
 
     train_metrics = compute_all_metrics(y_train, y_train_pred_prob)
     test_metrics = compute_all_metrics(y_test, y_test_pred_prob)
@@ -178,17 +215,16 @@ for train_idx, test_idx in cv.split(X_tfidf, y):
         'test_auc': test_metrics['auc_roc'],
         'metrics': test_metrics,
         'model': lasso,
-        'coefs': lasso.coef_[0],
+        'coefs': lasso.coef_[0],  # fold-local vocabulary; not compared across folds
     })
 
     # ========== RIDGE ==========
-    ridge = LogisticRegressionCV(Cs=np.logspace(-3, 3, 10), cv=5, l1_ratios=(0,),
-                                solver='liblinear', max_iter=2000, class_weight='balanced',
-                                scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
+    ridge = _fresh_clf('Ridge')
     ridge.fit(X_train, y_train)
 
     y_train_pred_prob = ridge.predict_proba(X_train)[:, 1]
     y_test_pred_prob = ridge.predict_proba(X_test)[:, 1]
+    oof_proba['Ridge'][test_idx] = y_test_pred_prob
 
     train_metrics = compute_all_metrics(y_train, y_train_pred_prob)
     test_metrics = compute_all_metrics(y_test, y_test_pred_prob)
@@ -199,16 +235,13 @@ for train_idx, test_idx in cv.split(X_tfidf, y):
         'metrics': test_metrics,
     })
 
-    # ========== RANDOM FOREST ==========
-    X_dense = X_train.toarray()
-    X_test_dense = X_test.toarray()
+    # ========== RANDOM FOREST ========== (sparse input accepted directly)
+    rf = _fresh_clf('RF')
+    rf.fit(X_train, y_train)
 
-    rf = RandomForestClassifier(n_estimators=200, max_features='sqrt',
-                               random_state=SEED, class_weight='balanced', n_jobs=-1)
-    rf.fit(X_dense, y_train)
-
-    y_train_pred_prob = rf.predict_proba(X_dense)[:, 1]
-    y_test_pred_prob = rf.predict_proba(X_test_dense)[:, 1]
+    y_train_pred_prob = rf.predict_proba(X_train)[:, 1]
+    y_test_pred_prob = rf.predict_proba(X_test)[:, 1]
+    oof_proba['RF'][test_idx] = y_test_pred_prob
 
     train_metrics = compute_all_metrics(y_train, y_train_pred_prob)
     test_metrics = compute_all_metrics(y_test, y_test_pred_prob)
@@ -274,32 +307,27 @@ bias_var_df = pd.DataFrame(bias_var_data)
 # 7. COMPREHENSIVE METRICS TABLE (TESTS 1, 2, 3, 5)
 # ============================================================================
 print("\n7. COMPUTING COMPREHENSIVE METRICS TABLE...")
+print("   NOTE: the *_final models below are fit on the FULL corpus (full-corpus")
+print("   TF-IDF from Section 2) and used ONLY for coefficient interpretation")
+print("   (Test 1 p-values, top-feature tables). They are in-sample fits, not a")
+print("   held-out estimate. Test 5's regression metrics (MAE/RMSE/R²) instead")
+print("   use the out-of-fold predictions accumulated during the Section 4 loop.")
 
 model_results = []
 
-# Train final models on full data for metrics
-X_tfidf_dense = X_tfidf.toarray()
-
-lr_final = LogisticRegression(random_state=SEED, max_iter=1000, class_weight='balanced')
+# Full-sample fits for COEFFICIENT INTERPRETATION ONLY (Test 1 p-values, top
+# LASSO/RF feature tables) -- these are NOT held-out performance estimates.
+lr_final = _fresh_clf('Logistic')
 lr_final.fit(X_tfidf, y)
-lr_final_proba = lr_final.predict_proba(X_tfidf)[:, 1]
 
-lasso_final = LogisticRegressionCV(Cs=np.logspace(-3, 3, 10), cv=5, l1_ratios=(1,),
-                                   solver='liblinear', max_iter=2000, class_weight='balanced',
-                                   scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
+lasso_final = _fresh_clf('LASSO')
 lasso_final.fit(X_tfidf, y)
-lasso_final_proba = lasso_final.predict_proba(X_tfidf)[:, 1]
 
-ridge_final = LogisticRegressionCV(Cs=np.logspace(-3, 3, 10), cv=5, l1_ratios=(0,),
-                                  solver='liblinear', max_iter=2000, class_weight='balanced',
-                                  scoring='roc_auc', random_state=SEED, use_legacy_attributes=False)
+ridge_final = _fresh_clf('Ridge')
 ridge_final.fit(X_tfidf, y)
-ridge_final_proba = ridge_final.predict_proba(X_tfidf)[:, 1]
 
-rf_final = RandomForestClassifier(n_estimators=200, max_features='sqrt',
-                                 random_state=SEED, class_weight='balanced', n_jobs=-1)
-rf_final.fit(X_tfidf_dense, y)
-rf_final_proba = rf_final.predict_proba(X_tfidf_dense)[:, 1]
+rf_final = _fresh_clf('RF')
+rf_final.fit(X_tfidf, y)
 
 # ========== TEST 1: P-VALUES FOR LOGISTIC ==========
 print("\n   Computing p-values for Logistic Regression...")
@@ -370,13 +398,16 @@ for model_name in ['Logistic', 'LASSO', 'Ridge', 'RF']:
     print(f"      {model_name}: AUC = {mean_auc:.4f} [95% CI: {ci_lower:.4f}-{ci_upper:.4f}]")
 
 # ========== TEST 5: REGRESSION METRICS (MAE, RMSE, R²) ==========
-print("\n   Computing regression metrics (MAE, RMSE, R²)...")
+# Uses out-of-fold predictions (oof_proba, accumulated in Section 4's per-fold
+# loop) -- a genuine held-out estimate, unlike scoring the *_final models
+# above against the same full data they were fit on.
+print("\n   Computing regression metrics (MAE, RMSE, R²) from out-of-fold predictions...")
 
 models_for_metrics = [
-    ('Logistic', lr_final_proba, 'cv'),
-    ('LASSO', lasso_final_proba, 'cv'),
-    ('Ridge', ridge_final_proba, 'cv'),
-    ('RF', rf_final_proba, 'cv'),
+    ('Logistic', oof_proba['Logistic'], 'oof'),
+    ('LASSO', oof_proba['LASSO'], 'oof'),
+    ('Ridge', oof_proba['Ridge'], 'oof'),
+    ('RF', oof_proba['RF'], 'oof'),
 ]
 
 for model_name, y_pred_prob, eval_type in models_for_metrics:
@@ -476,7 +507,7 @@ print("\n" + "="*80)
 print("SUMMARY: STATISTICAL RIGOR TESTS COMPLETED")
 print("="*80)
 
-print("\n✓ TEST 1: P-VALUES FOR COEFFICIENTS (Linear Models Only)")
+print("\n✓ TEST 1: P-VALUES FOR COEFFICIENTS (Linear Models Only, full-sample fit -- interpretation only)")
 print(f"   Logistic: {lr_significant}/2000 significant coefficients")
 print(f"   LASSO: {lasso_significant}/{non_zero_count} significant non-zero coefficients")
 print(f"   Ridge: {ridge_significant}/2000 significant coefficients")
@@ -494,7 +525,7 @@ for model_name in ['Logistic', 'LASSO', 'Ridge', 'RF']:
     std = results_by_fold[model_name]['std_auc']
     print(f"   {model_name}: AUC = {mean:.4f} ± {std:.4f}")
 
-print("\n✓ TEST 5: REGRESSION METRICS (MAE, RMSE, R²)")
+print("\n✓ TEST 5: REGRESSION METRICS (MAE, RMSE, R², out-of-fold predictions)")
 print("   (See comprehensive_metrics_table.csv)")
 
 print("\n✓ TEST 6: BIAS-VARIANCE ANALYSIS (Train vs Test)")
@@ -513,6 +544,7 @@ with open('results/statistical_analysis/STATISTICAL_SUMMARY.txt', 'w', encoding=
     f.write("="*80 + "\n\n")
 
     f.write("TEST 1: P-VALUES FOR COEFFICIENTS\n")
+    f.write("(full-sample, in-sample fit -- coefficient interpretation only, NOT a held-out estimate)\n")
     f.write("-"*80 + "\n")
     f.write(f"Logistic: {lr_significant}/2000 significant coefficients (p<0.05)\n")
     f.write(f"LASSO: {lasso_significant}/{non_zero_count} significant non-zero coefficients (p<0.05)\n")
@@ -544,6 +576,7 @@ with open('results/statistical_analysis/STATISTICAL_SUMMARY.txt', 'w', encoding=
     f.write("\n")
 
     f.write("TEST 5: REGRESSION METRICS\n")
+    f.write("(computed from out-of-fold predictions -- a genuine held-out estimate)\n")
     f.write("-"*80 + "\n")
     f.write(comp_df.to_string(index=False))
     f.write("\n\n")
@@ -554,6 +587,7 @@ with open('results/statistical_analysis/STATISTICAL_SUMMARY.txt', 'w', encoding=
     f.write("\n\n")
 
     f.write("FEATURE ANALYSIS: TOP SIGNIFICANT PREDICTORS\n")
+    f.write("(full-sample, in-sample fit -- coefficient interpretation only)\n")
     f.write("-"*80 + "\n")
     f.write("Research Question: Which words predict bill passage/failure?\n\n")
     if non_zero_count > 0:

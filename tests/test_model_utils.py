@@ -5,7 +5,28 @@ import numpy as np
 import pandas as pd
 from sklearn.datasets import make_classification
 from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
 from src import model_utils
+
+
+def _make_text_classification_data(n_samples=120, seed=42):
+    """Small synthetic text + label dataset for pipeline tests (avoids needing
+    real Congressional data in unit tests; large enough for min_df=5 with a
+    permissive vectorizer config override)."""
+    rng = np.random.RandomState(seed)
+    passed_vocab = ["consent", "unanimous", "suspend", "motion", "senate"]
+    failed_vocab = ["controversial", "partisan", "reckless", "unfunded", "deficit"]
+    filler = ["the", "bill", "act", "congress", "committee", "vote", "floor"]
+
+    texts, labels = [], []
+    for i in range(n_samples):
+        is_passed = i % 2 == 0
+        vocab = passed_vocab if is_passed else failed_vocab
+        words = rng.choice(vocab, size=15).tolist() + rng.choice(filler, size=15).tolist()
+        rng.shuffle(words)
+        texts.append(" ".join(words))
+        labels.append(1 if is_passed else 0)
+    return np.array(texts), np.array(labels)
 
 
 class TestModelTraining:
@@ -276,6 +297,98 @@ class TestModelComparison:
 
         assert result.loc[0, "model"] == "Model A"
         assert result.loc[0, "accuracy_mean"] == 0.85
+
+
+class TestPipelineBuilders:
+    """Test leak-free TF-IDF -> classifier pipeline builders.
+
+    These pipelines exist so cross_validate/cross_val_predict can refit the
+    TfidfVectorizer fresh on each training fold, instead of fitting it once on
+    the full corpus before splitting (the leakage bug fixed in this pass).
+    Tests fit on raw text directly, mirroring real usage.
+    """
+
+    @pytest.fixture
+    def text_data(self):
+        return _make_text_classification_data()
+
+    def test_build_logistic_pipeline_is_unfit_pipeline(self):
+        pipeline = model_utils.build_logistic_pipeline(random_state=42)
+        assert isinstance(pipeline, Pipeline)
+        assert list(pipeline.named_steps.keys()) == ["tfidf", "clf"]
+        assert not hasattr(pipeline.named_steps["clf"], "coef_")
+
+    def test_logistic_pipeline_fits_and_predicts_on_text(self, text_data):
+        X_text, y = text_data
+        pipeline = model_utils.build_logistic_pipeline(random_state=42)
+        pipeline.fit(X_text, y)
+
+        preds = pipeline.predict(X_text[:10])
+        proba = pipeline.predict_proba(X_text[:10])
+        assert len(preds) == 10
+        assert set(preds).issubset({0, 1})
+        assert proba.shape == (10, 2)
+
+    def test_lasso_pipeline_fits_and_has_coefficients(self, text_data):
+        X_text, y = text_data
+        pipeline = model_utils.build_lasso_pipeline(random_state=42)
+        pipeline.fit(X_text, y)
+
+        assert hasattr(pipeline.named_steps["clf"], "coef_")
+        assert isinstance(pipeline.named_steps["tfidf"].get_feature_names_out(), np.ndarray)
+
+    def test_ridge_pipeline_fits_and_has_coefficients(self, text_data):
+        X_text, y = text_data
+        pipeline = model_utils.build_ridge_pipeline(random_state=42)
+        pipeline.fit(X_text, y)
+
+        assert hasattr(pipeline.named_steps["clf"], "coef_")
+
+    def test_random_forest_pipeline_fits_on_sparse_tfidf_output(self, text_data):
+        X_text, y = text_data
+        pipeline = model_utils.build_random_forest_pipeline(n_estimators=10, random_state=42)
+        pipeline.fit(X_text, y)
+
+        assert hasattr(pipeline.named_steps["clf"], "feature_importances_")
+        preds = pipeline.predict(X_text[:10])
+        assert len(preds) == 10
+
+    def test_get_top_features_lasso_from_pipeline(self, text_data):
+        X_text, y = text_data
+        pipeline = model_utils.build_lasso_pipeline(random_state=42)
+        pipeline.fit(X_text, y)
+
+        result = model_utils.get_top_features_lasso_from_pipeline(pipeline, top_n=5)
+        assert isinstance(result, pd.DataFrame)
+        assert "feature" in result.columns
+        assert "coefficient" in result.columns
+        assert len(result) <= 5
+
+    def test_get_top_features_rf_from_pipeline(self, text_data):
+        X_text, y = text_data
+        pipeline = model_utils.build_random_forest_pipeline(n_estimators=10, random_state=42)
+        pipeline.fit(X_text, y)
+
+        result = model_utils.get_top_features_rf_from_pipeline(pipeline, top_n=5)
+        assert isinstance(result, pd.DataFrame)
+        assert "feature" in result.columns
+        assert "importance" in result.columns
+
+    def test_pipeline_refits_vectorizer_per_call_no_state_bleed(self, text_data):
+        """A fresh build_*_pipeline() call must not share vectorizer state with
+        a previously-fit pipeline instance (guards against accidentally reusing
+        one fitted pipeline object across CV/interpretation call sites)."""
+        X_text, y = text_data
+        pipeline_a = model_utils.build_logistic_pipeline(random_state=42)
+        pipeline_a.fit(X_text, y)
+
+        pipeline_b = model_utils.build_logistic_pipeline(random_state=42)
+        assert not hasattr(pipeline_b.named_steps["clf"], "coef_")
+        pipeline_b.fit(X_text[:60], y[:60])
+
+        vocab_a = pipeline_a.named_steps["tfidf"].vocabulary_
+        vocab_b = pipeline_b.named_steps["tfidf"].vocabulary_
+        assert vocab_a is not vocab_b
 
 
 if __name__ == "__main__":

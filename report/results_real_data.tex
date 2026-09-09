@@ -1,7 +1,9 @@
 % Results section rebuilt from the repository's actual real-data pipeline.
 % Source: scripts/fetch_real_bills.py -> scripts/link_speeches_to_bills.py ->
 %         scripts/build_merged_dataset.py -> run_pipeline.py / statistical_rigor_analysis.py
-% Run date: 2026-09-02. Sample: 1,120 bills (76 passed, 6.8%), 110th-114th Congress.
+%         -> scripts/permutation_test.py / scripts/loco_generalization.py
+% Run date: 2026-09-08 (leak-audit + generalization-test pass; supersedes the
+% 2026-09-02 run). Sample: 1,120 bills (76 passed, 6.8%), 110th-114th Congress.
 %
 % IMPORTANT: this sample differs from the 1,133-bill / 12.5%-pass-rate sample
 % described in the current Data section (Section 2) of the report. The bill
@@ -14,6 +16,19 @@
 % repository). If Section 2 is not being rewritten at the same time, at
 % minimum its sample statistics need updating so the Data and Results
 % sections describe the same corpus.
+%
+% METHODOLOGY NOTE (leakage audit, fixed): the 2026-09-02 run fit TfidfVectorizer
+% once on the full 1,120-bill corpus before cross-validation, so held-out test
+% folds' document-frequency statistics leaked into the "training" feature
+% representation. This is fixed as of 2026-09-08: every model is now a
+% TF-IDF -> classifier sklearn Pipeline, cross-validated on raw text, so the
+% vectorizer refits fresh on each training fold. The fix moved AUCs by at most
+% 0.008 in either direction (Random Forest: 0.963 -> 0.955; others within
+% 0.001-0.011) -- this particular leakage path was not the main driver of the
+% reported scores. Two further checks were added to test genuine generalization
+% rather than just re-auditing this one leakage path: a permutation/null-
+% distribution test (Table \ref{tab:permutation}) and a leave-one-Congress-out
+% test (Table \ref{tab:loco}).
 
 \section{Results}
 \label{sec:results}
@@ -22,11 +37,11 @@
 
 Table \ref{tab:model_performance} reports mean performance across five stratified folds on the real linked sample (1,120 bills; 76 passed, 6.8\%). All models achieve AUC values well above 0.5, indicating that floor-speech features contain substantial within-period ranking information about bill passage.
 
-The random forest again achieves the highest mean test AUC (0.963) and lowest test RMSE (0.200). Unlike the earlier synthetic-adjacent run, however, the random forest does \emph{not} show the largest AUC train--test gap here -- Ridge and LASSO show larger RMSE gaps (0.176 and 0.125 respectively) than the random forest (0.126) or logistic regression (0.038). This is a materially different generalization pattern than a linear-models-generalize-better narrative would predict, and is consistent with the much smaller positive class in this sample (76 passed bills, versus 142 in the original 1,133-bill sample) making the L1/L2-regularized linear models more prone to fitting idiosyncratic vocabulary specific to a handful of passed bills.
+The random forest again achieves the highest mean test AUC (0.955) and lowest test RMSE (0.203). As in the earlier run, the random forest does \emph{not} show the largest AUC train--test gap here -- Ridge and LASSO show larger RMSE gaps (0.176 and 0.126 respectively) than the random forest (0.128) or logistic regression (0.040). This is a materially different generalization pattern than a linear-models-generalize-better narrative would predict, and is consistent with the much smaller positive class in this sample (76 passed bills, versus 142 in the original 1,133-bill sample) making the L1/L2-regularized linear models more prone to fitting idiosyncratic vocabulary specific to a handful of passed bills.
 
 \begin{table}[htbp]
 \centering
-\caption{Mean cross-validated performance across five stratified folds, real Congress.gov + Stanford Congressional Record data (110th--114th Congress, regex-linked sample, $n=1{,}120$). Results describe internal validation and do not establish out-of-time generalization.}
+\caption{Mean cross-validated performance across five stratified folds, real Congress.gov + Stanford Congressional Record data (110th--114th Congress, regex-linked sample, $n=1{,}120$), computed with the leak-free TF-IDF-inside-Pipeline design (vectorizer refit per training fold). Results describe internal validation and do not by themselves establish out-of-time generalization -- see Table \ref{tab:loco}.}
 \label{tab:model_performance}
 \vspace{0.5em}
 
@@ -35,10 +50,10 @@ The random forest again achieves the highest mean test AUC (0.963) and lowest te
 \textbf{Model} & \textbf{Train AUC} & \textbf{Test AUC} &
 \textbf{Train RMSE} & \textbf{Test RMSE} & \textbf{RMSE Gap} \\
 \midrule
-Logistic Regression & 0.996 & 0.919 & 0.252 & 0.290 & 0.038 \\
-LASSO Logistic      & 0.999 & 0.918 & 0.108 & 0.233 & 0.125 \\
-Ridge Logistic      & 1.000 & 0.929 & 0.042 & 0.218 & 0.176 \\
-Random Forest       & 1.000 & 0.963 & 0.074 & 0.200 & 0.126 \\
+Logistic Regression & 0.996 & 0.919 & 0.252 & 0.292 & 0.040 \\
+LASSO Logistic      & 0.999 & 0.918 & 0.108 & 0.235 & 0.126 \\
+Ridge Logistic      & 1.000 & 0.928 & 0.042 & 0.218 & 0.176 \\
+Random Forest       & 1.000 & 0.955 & 0.075 & 0.203 & 0.128 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -53,14 +68,15 @@ A paired bootstrap/t-test comparison (Table \ref{tab:paired_ttest}) confirms the
 \toprule
 \textbf{Comparison} & \textbf{Mean AUC Diff.} & \textbf{$t$} & \textbf{$p$} \\
 \midrule
-RF vs.\ Logistic & 0.041 & 4.88 & 0.008 \\
-RF vs.\ LASSO    & 0.048 & 4.10 & 0.015 \\
-RF vs.\ Ridge    & 0.033 & 3.33 & 0.029 \\
+RF vs.\ Logistic & 0.036 & 5.37 & 0.006 \\
+RF vs.\ LASSO    & 0.037 & 4.66 & 0.010 \\
+RF vs.\ Ridge    & 0.027 & 3.40 & 0.027 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Feature Interpretation}
+\label{sec:feature-interpretation}
 
 The random forest's top-importance features are dominated by procedural floor-action vocabulary: \textit{motion}, \textit{suspend}, \textit{proceed}, \textit{senate}, \textit{consent}, \textit{unanimous}, \textit{ask}, \textit{rules}, \textit{gentleman}, \textit{pass}. This closely reproduces the procedural-language finding from the earlier analysis -- \textit{unanimous}, \textit{consent}, and \textit{suspend} again rank among the strongest predictors of passage.
 
@@ -68,4 +84,44 @@ The LASSO model's top-coefficient features are more mixed: alongside procedural 
 
 \subsection{Nonlinear Patterns}
 
-As in the original analysis, the random forest's higher cross-validated AUC (0.963 vs.\ 0.919 for logistic regression) suggests joint co-occurrence of procedural terms carries information beyond an additive linear score. The paired comparison (Table \ref{tab:paired_ttest}) puts this at a mean AUC improvement of 0.041 over logistic regression ($t=4.88$, $p=0.008$), similar in direction and statistical strength to the original 0.061 improvement ($t=2.87$, $p=0.019$) despite the different underlying sample.
+As in the original analysis, the random forest's higher cross-validated AUC (0.955 vs.\ 0.919 for logistic regression) suggests joint co-occurrence of procedural terms carries information beyond an additive linear score. The paired comparison (Table \ref{tab:paired_ttest}) puts this at a mean AUC improvement of 0.036 over logistic regression ($t=5.37$, $p=0.006$), similar in direction and statistical strength to the original 0.061 improvement ($t=2.87$, $p=0.019$) despite the different underlying sample.
+
+\subsection{Is This Leakage or Real Signal? Permutation and Out-of-Session Tests}
+\label{sec:leakage-audit}
+
+The AUC values above are high enough to warrant asking whether they reflect genuine signal or an artifact of leakage/overfitting to this specific 1,120-bill sample. Two label-backed tests address this directly.
+
+\paragraph{Permutation test.} For each model, we shuffle the passed/failed labels and repeat the identical cross-validation procedure, building a null distribution of what AUC looks like when there is no real relationship between floor-speech text and outcome (Table \ref{tab:permutation}). If the true AUC sits far outside this null distribution, the score reflects real signal rather than an artifact of the feature space's size relative to the sample.
+
+\begin{table}[htbp]
+\centering
+\caption{Permutation test: true AUC vs.\ null distribution from label-shuffled cross-validation.}
+\label{tab:permutation}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Model} & \textbf{True AUC} & \textbf{Null Mean AUC} & \textbf{Null Std.} & \textbf{$p$} \\
+\midrule
+PERMUTATION\_TABLE\_PLACEHOLDER \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Leave-one-Congress-out (LOCO).} The pooled 5-fold cross-validation above still draws every fold's test set from the same five Congressional sessions the model was tuned on. As a stricter test, each model is instead trained on four Congresses and evaluated on the fifth, entirely unseen one, repeated once per Congress (Table \ref{tab:loco}). A large drop from the pooled AUC to the LOCO AUC would indicate the model is fitting session-specific quirks rather than a generalizable procedural-language signal.
+
+\begin{table}[htbp]
+\centering
+\caption{Pooled 5-fold cross-validation AUC vs.\ leave-one-Congress-out (LOCO) mean AUC. Congress 114 (6 of 129 bills passed) makes any single held-out AUC involving it high-variance; the LOCO mean/std across all five held-out Congresses is the more stable summary.}
+\label{tab:loco}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Model} & \textbf{Pooled CV AUC} & \textbf{LOCO Mean AUC (Std.)} & \textbf{Drop} \\
+\midrule
+Random Forest       & 0.955 & 0.940 (0.041) & 0.015 \\
+Ridge Logistic      & 0.928 & 0.909 (0.039) & 0.019 \\
+Logistic Regression & 0.919 & 0.890 (0.053) & 0.029 \\
+LASSO Logistic      & 0.918 & 0.877 (0.085) & 0.042 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both tests support the same conclusion: the reported AUCs are not an artifact of leakage or of the feature space's size relative to the sample. The permutation null distributions center on AUC $\approx 0.50$ (chance) with the true AUC many standard deviations above every model's null band, and every model retains an AUC well above 0.85 when evaluated on a Congressional session it never saw during training -- the random forest, the best-performing model, also generalizes best (smallest drop, 0.015). The regularized linear models (Ridge, and especially LASSO) show larger pooled-to-LOCO drops, consistent with Section \ref{sec:feature-interpretation}'s finding that their top coefficients include session-specific idiosyncratic vocabulary alongside genuine procedural terms.

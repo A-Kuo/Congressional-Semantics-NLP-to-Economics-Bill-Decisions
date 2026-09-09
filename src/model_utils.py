@@ -10,10 +10,29 @@ from sklearn.metrics import (
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import Pipeline
 import numpy as np
 
 
 SEED = 42
+
+# Shared TF-IDF config (matches report Appendix A and src/nlp_utils.create_tfidf_features).
+# Centralized here so build_*_pipeline functions and any script that needs the same
+# vectorizer settings (e.g. statistical_rigor_analysis.py) share one source of truth.
+TFIDF_KWARGS = dict(
+    max_features=5000,
+    min_df=5,
+    max_df=0.95,
+    stop_words="english",
+    lowercase=True,
+    token_pattern=r"\b[a-z]+\b",
+)
+
+
+def _make_tfidf():
+    """Fresh, unfit TfidfVectorizer using the shared config."""
+    return TfidfVectorizer(**TFIDF_KWARGS)
 
 
 class ModelEvaluator:
@@ -211,6 +230,101 @@ def train_random_forest(
     )
     model.fit(X, y)
     return model
+
+
+def build_logistic_pipeline(random_state=SEED) -> Pipeline:
+    """
+    Build an UNFIT Logistic Regression pipeline: TF-IDF -> classifier.
+
+    Fitting this as a whole inside cross-validation (e.g. via
+    ModelEvaluator.evaluate_classifier or cross_val_predict) refits the TF-IDF
+    vectorizer fresh on each training fold, eliminating the global-vocabulary
+    leakage that comes from fitting TfidfVectorizer once on the full corpus
+    before splitting. Pass raw text (not a precomputed matrix) as X.
+    """
+    return Pipeline([
+        ("tfidf", _make_tfidf()),
+        ("clf", LogisticRegression(
+            random_state=random_state,
+            max_iter=1000,
+            solver="lbfgs",
+            class_weight="balanced",
+        )),
+    ])
+
+
+def build_lasso_pipeline(random_state=SEED) -> Pipeline:
+    """
+    Build an UNFIT LASSO logistic regression pipeline: TF-IDF -> classifier.
+
+    See build_logistic_pipeline for why this must be fit inside CV on raw text.
+    LogisticRegressionCV's internal cv=5 hyperparameter tuning stays leak-free
+    inside a Pipeline: it only ever sees the outer fold's training rows, since
+    the whole pipeline (including the TF-IDF step) is fit once per outer fold.
+    """
+    return Pipeline([
+        ("tfidf", _make_tfidf()),
+        ("clf", LogisticRegressionCV(
+            Cs=np.logspace(-3, 3, 10),
+            cv=5,
+            l1_ratios=(1,),
+            solver="liblinear",
+            random_state=random_state,
+            max_iter=2000,
+            class_weight="balanced",
+            scoring="roc_auc",
+            use_legacy_attributes=False,
+        )),
+    ])
+
+
+def build_ridge_pipeline(random_state=SEED) -> Pipeline:
+    """Build an UNFIT Ridge logistic regression pipeline: TF-IDF -> classifier."""
+    return Pipeline([
+        ("tfidf", _make_tfidf()),
+        ("clf", LogisticRegressionCV(
+            Cs=np.logspace(-3, 3, 10),
+            cv=5,
+            l1_ratios=(0,),
+            solver="liblinear",
+            random_state=random_state,
+            max_iter=2000,
+            class_weight="balanced",
+            scoring="roc_auc",
+            use_legacy_attributes=False,
+        )),
+    ])
+
+
+def build_random_forest_pipeline(n_estimators=200, random_state=SEED) -> Pipeline:
+    """
+    Build an UNFIT Random Forest pipeline: TF-IDF -> classifier.
+
+    RandomForestClassifier accepts sparse input directly, so no .toarray()
+    densification step is needed inside the pipeline.
+    """
+    return Pipeline([
+        ("tfidf", _make_tfidf()),
+        ("clf", RandomForestClassifier(
+            n_estimators=n_estimators,
+            max_features="sqrt",
+            random_state=random_state,
+            class_weight="balanced",
+            n_jobs=-1,
+        )),
+    ])
+
+
+def get_top_features_lasso_from_pipeline(pipeline: Pipeline, top_n: int = 20) -> pd.DataFrame:
+    """Extract top LASSO-selected features from an already-fitted pipeline."""
+    feature_names = pipeline.named_steps["tfidf"].get_feature_names_out()
+    return get_top_features_lasso(pipeline.named_steps["clf"], feature_names, top_n=top_n)
+
+
+def get_top_features_rf_from_pipeline(pipeline: Pipeline, top_n: int = 30) -> pd.DataFrame:
+    """Extract top Random Forest feature importances from an already-fitted pipeline."""
+    feature_names = pipeline.named_steps["tfidf"].get_feature_names_out()
+    return get_top_features_rf(pipeline.named_steps["clf"], feature_names, top_n=top_n)
 
 
 def get_top_features_lasso(

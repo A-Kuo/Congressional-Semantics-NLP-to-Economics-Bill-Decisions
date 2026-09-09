@@ -6,7 +6,13 @@ all results tables and figures to results/. This reproduces the findings from
 "Predicting Congressional Bill Passage from Floor-Speech Language" (April 2026).
 
 DEFAULT: Uses real data from data/processed/bills_speeches_preprocessed.csv
-(1,133 bills, 12.5% pass rate, 110th–114th Congress, economic legislation only).
+(1,120 bills, 6.8% pass rate, 110th–114th Congress, economic legislation only).
+
+All four models are built as TF-IDF -> classifier sklearn Pipelines
+(src/model_utils.build_*_pipeline) and cross-validated on raw text, so the
+TfidfVectorizer refits fresh on each training fold instead of being fit once
+on the full corpus before splitting -- see src/model_utils.py docstrings for
+why the earlier global-fit approach was a leakage bug.
 
 Usage:
     python run_pipeline.py                        # RECOMMENDED: use real data
@@ -84,7 +90,18 @@ def step1_load_data(use_synthetic: bool = False, n_synthetic: int = 2000) -> pd.
 # ══════════════════════════════════════════════════════════════════════════════
 
 def step2_tfidf(df: pd.DataFrame):
-    """Create TF-IDF feature matrix."""
+    """
+    Descriptive TF-IDF stats + word clouds (vocabulary size, sparsity).
+
+    This fits a TfidfVectorizer on the FULL corpus, but only for descriptive/EDA
+    output (sparsity %, word clouds). That fit is never reused for evaluation --
+    doing so would reintroduce global-vocabulary leakage (test-fold document
+    frequencies leaking into "training" features). Steps 3-6 instead build their
+    own TF-IDF-inside-Pipeline objects (src/model_utils.build_*_pipeline) that
+    are cross-validated on raw text, refitting the vectorizer fresh per fold.
+
+    Returns (X_text, y) for use by steps 3-6.
+    """
     print("\n" + "=" * 60)
     print("STEP 2: TF-IDF Feature Engineering")
     print("=" * 60)
@@ -96,7 +113,7 @@ def step2_tfidf(df: pd.DataFrame):
         X_text, max_features=5000, min_df=5, max_df=0.95
     )
 
-    # Assertions
+    # Assertions (descriptive only -- this matrix is not used for modeling)
     assert X_tfidf.shape[0] == len(y)
     assert X_tfidf.shape[1] > 10
     sparsity = 1 - (X_tfidf.nnz / (X_tfidf.shape[0] * X_tfidf.shape[1]))
@@ -105,10 +122,10 @@ def step2_tfidf(df: pd.DataFrame):
     min_sparsity = 0.50 if X_tfidf.shape[1] >= 500 else 0.10
     assert sparsity > min_sparsity, f"Sparsity {sparsity:.1%} < {min_sparsity:.0%}"
 
-    print(f"✓ TF-IDF matrix: {X_tfidf.shape[0]} docs × {X_tfidf.shape[1]} features")
+    print(f"✓ TF-IDF matrix: {X_tfidf.shape[0]} docs × {X_tfidf.shape[1]} features (full-corpus, descriptive only)")
     print(f"  Sparsity: {sparsity:.1%}")
 
-    # Word clouds
+    # Word clouds (built from raw text directly, not the TF-IDF matrix above)
     viz_utils.plot_wordcloud(df[df["passed"] == 1]["speeches_combined"].values,
                               output_path=f"{FIGURES_DIR}/tfidf_wordcloud_passed.png",
                               title="Top Terms in PASSED Bills")
@@ -117,22 +134,24 @@ def step2_tfidf(df: pd.DataFrame):
                               title="Top Terms in FAILED Bills")
     print("✓ Word cloud figures saved")
 
-    return X_tfidf, vectorizer, feature_names, y
+    return X_text, y
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 3 ── Baseline Logistic Regression
 # ══════════════════════════════════════════════════════════════════════════════
 
-def step3_logistic(X_tfidf, y, feature_names) -> dict:
-    """Train and evaluate baseline logistic regression."""
+def step3_logistic(X_text, y) -> dict:
+    """Train and evaluate baseline logistic regression (TF-IDF -> classifier pipeline)."""
     print("\n" + "=" * 60)
     print("STEP 3: Baseline Logistic Regression")
     print("=" * 60)
 
-    model = model_utils.train_logistic_regression(X_tfidf, y, random_state=SEED)
+    pipeline = model_utils.build_logistic_pipeline(random_state=SEED)
     evaluator = model_utils.ModelEvaluator(random_state=SEED)
-    results = evaluator.evaluate_classifier(model, X_tfidf, y,
+    # Leak-free: evaluate_classifier -> cross_validate clones this pipeline per
+    # fold, so the TF-IDF step refits on each training fold only.
+    results = evaluator.evaluate_classifier(pipeline, X_text, y,
                                              model_name="Logistic Regression (Baseline)")
 
     # Assertions
@@ -144,31 +163,40 @@ def step3_logistic(X_tfidf, y, feature_names) -> dict:
 
     beats = results["accuracy_mean"] > 0.50
     print(f"  Beats random chance: {'YES' if beats else 'NO'}")
-    return {"model": model, "results": results}
+
+    # Full-sample fit for interpretation / step6's cross_val_predict (which
+    # clones this pipeline fresh per fold regardless of its current fit state).
+    pipeline.fit(X_text, y)
+    return {"pipeline": pipeline, "results": results}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 4 ── LASSO & Ridge Regularization
 # ══════════════════════════════════════════════════════════════════════════════
 
-def step4_regularization(X_tfidf, y, feature_names) -> dict:
-    """Train LASSO and Ridge; extract top features."""
+def step4_regularization(X_text, y) -> dict:
+    """Train LASSO and Ridge (TF-IDF -> classifier pipelines); extract top features."""
     print("\n" + "=" * 60)
     print("STEP 4: LASSO & Ridge Regularization")
     print("=" * 60)
 
-    lasso_model = model_utils.train_lasso_logistic(X_tfidf, y, cv_splits=5, random_state=SEED)
-    ridge_model = model_utils.train_ridge_logistic(X_tfidf, y, cv_splits=5, random_state=SEED)
+    lasso_pipeline = model_utils.build_lasso_pipeline(random_state=SEED)
+    ridge_pipeline = model_utils.build_ridge_pipeline(random_state=SEED)
 
     evaluator = model_utils.ModelEvaluator(random_state=SEED)
-    lasso_res = evaluator.evaluate_classifier(lasso_model, X_tfidf, y, model_name="LASSO")
-    ridge_res = evaluator.evaluate_classifier(ridge_model, X_tfidf, y, model_name="Ridge")
+    lasso_res = evaluator.evaluate_classifier(lasso_pipeline, X_text, y, model_name="LASSO")
+    ridge_res = evaluator.evaluate_classifier(ridge_pipeline, X_text, y, model_name="Ridge")
 
     pd.DataFrame([lasso_res, ridge_res]).to_csv(
         f"{TABLES_DIR}/lasso_ridge_comparison.csv", index=False)
 
+    # Full-sample fit for feature interpretation (not a held-out performance number
+    # -- the CV metrics above already came from the leak-free per-fold evaluation).
+    lasso_pipeline.fit(X_text, y)
+    ridge_pipeline.fit(X_text, y)
+
     # Top LASSO features
-    top_lasso = model_utils.get_top_features_lasso(lasso_model, feature_names, top_n=20)
+    top_lasso = model_utils.get_top_features_lasso_from_pipeline(lasso_pipeline, top_n=20)
     top_lasso.to_csv(f"{TABLES_DIR}/lasso_top_features.csv", index=False)
 
     viz_utils.plot_feature_coefficients(
@@ -178,16 +206,18 @@ def step4_regularization(X_tfidf, y, feature_names) -> dict:
         max_features=20,
     )
 
-    n_zero = (np.asarray(lasso_model.coef_).squeeze() == 0).sum()
-    sparsity = n_zero / feature_names.shape[0]
+    lasso_clf = lasso_pipeline.named_steps["clf"]
+    n_features = lasso_pipeline.named_steps["tfidf"].get_feature_names_out().shape[0]
+    n_zero = (np.asarray(lasso_clf.coef_).squeeze() == 0).sum()
+    sparsity = n_zero / n_features
     print(f"✓ LASSO: AUC {lasso_res['auc_roc_mean']:.3f}  |  Ridge: AUC {ridge_res['auc_roc_mean']:.3f}")
     print(f"  LASSO sparsity: {sparsity:.1%}  ({n_zero} features zeroed)")
     print(f"  Top positive word: {top_lasso[top_lasso['coefficient'] > 0].iloc[0]['feature'] if (top_lasso['coefficient'] > 0).any() else 'N/A'}")
     print(f"  Top negative word: {top_lasso[top_lasso['coefficient'] < 0].iloc[0]['feature'] if (top_lasso['coefficient'] < 0).any() else 'N/A'}")
 
     return {
-        "lasso": {"model": lasso_model, "results": lasso_res},
-        "ridge": {"model": ridge_model, "results": ridge_res},
+        "lasso": {"pipeline": lasso_pipeline, "results": lasso_res},
+        "ridge": {"pipeline": ridge_pipeline, "results": ridge_res},
         "top_features": top_lasso,
     }
 
@@ -196,21 +226,23 @@ def step4_regularization(X_tfidf, y, feature_names) -> dict:
 # STEP 5 ── Random Forest
 # ══════════════════════════════════════════════════════════════════════════════
 
-def step5_random_forest(X_tfidf, y, feature_names, lasso_top_features) -> dict:
-    """Train RF; compare feature agreement with LASSO."""
+def step5_random_forest(X_text, y, lasso_top_features) -> dict:
+    """Train RF (TF-IDF -> classifier pipeline); compare feature agreement with LASSO."""
     print("\n" + "=" * 60)
     print("STEP 5: Random Forest")
     print("=" * 60)
 
-    X_dense = X_tfidf.toarray()
-    rf_model = model_utils.train_random_forest(X_dense, y, n_estimators=200, random_state=SEED)
+    rf_pipeline = model_utils.build_random_forest_pipeline(n_estimators=200, random_state=SEED)
 
     evaluator = model_utils.ModelEvaluator(random_state=SEED)
-    rf_res = evaluator.evaluate_classifier(rf_model, X_dense, y, model_name="Random Forest")
+    rf_res = evaluator.evaluate_classifier(rf_pipeline, X_text, y, model_name="Random Forest")
     pd.DataFrame([rf_res]).to_csv(f"{TABLES_DIR}/rf_cv_scores.csv", index=False)
 
+    # Full-sample fit for feature interpretation (not a held-out performance number).
+    rf_pipeline.fit(X_text, y)
+
     # Feature importances
-    top_rf = model_utils.get_top_features_rf(rf_model, feature_names, top_n=30)
+    top_rf = model_utils.get_top_features_rf_from_pipeline(rf_pipeline, top_n=30)
     top_rf.to_csv(f"{TABLES_DIR}/rf_top_features.csv", index=False)
     viz_utils.plot_feature_importance(
         top_rf,
@@ -227,16 +259,17 @@ def step5_random_forest(X_tfidf, y, feature_names, lasso_top_features) -> dict:
     print(f"  LASSO/RF top-20 overlap: {len(overlap)} features  {sorted(overlap)[:5]}")
 
     # Assertions
-    assert np.isclose(rf_model.feature_importances_.sum(), 1.0, atol=1e-3)
+    rf_clf = rf_pipeline.named_steps["clf"]
+    assert np.isclose(rf_clf.feature_importances_.sum(), 1.0, atol=1e-3)
 
-    return {"model": rf_model, "results": rf_res, "top_features": top_rf}
+    return {"pipeline": rf_pipeline, "results": rf_res, "top_features": top_rf}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 6 ── Model Comparison & Visualizations
 # ══════════════════════════════════════════════════════════════════════════════
 
-def step6_comparison(models_info: dict, X_tfidf, y) -> pd.DataFrame:
+def step6_comparison(models_info: dict, X_text, y) -> pd.DataFrame:
     """Aggregate all results, produce ROC curves and confusion matrices."""
     print("\n" + "=" * 60)
     print("STEP 6: Model Comparison & Visualizations")
@@ -253,14 +286,17 @@ def step6_comparison(models_info: dict, X_tfidf, y) -> pd.DataFrame:
     comparison = pd.DataFrame(all_results)
     comparison.to_csv(f"{TABLES_DIR}/model_comparison.csv", index=False)
 
-    # Cross-val predictions for ROC & confusion matrices
+    # Cross-val predictions for ROC & confusion matrices.
+    # cross_val_predict clones each pipeline per fold (discarding any prior
+    # full-data fit) and refits TF-IDF on that fold's training text only --
+    # this is the same leakage bug fixed in evaluate_classifier above, now
+    # fixed here too for the ROC/confusion-matrix plots.
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
-    X_dense = X_tfidf.toarray()
 
-    lr_prob  = cross_val_predict(models_info["logistic"]["model"], X_tfidf, y, cv=cv, method="predict_proba")[:, 1]
-    las_prob = cross_val_predict(models_info["lasso"]["model"],   X_tfidf, y, cv=cv, method="predict_proba")[:, 1]
-    rid_prob = cross_val_predict(models_info["ridge"]["model"],   X_tfidf, y, cv=cv, method="predict_proba")[:, 1]
-    rf_prob  = cross_val_predict(models_info["rf"]["model"],      X_dense, y, cv=cv, method="predict_proba")[:, 1]
+    lr_prob  = cross_val_predict(models_info["logistic"]["pipeline"], X_text, y, cv=cv, method="predict_proba")[:, 1]
+    las_prob = cross_val_predict(models_info["lasso"]["pipeline"],    X_text, y, cv=cv, method="predict_proba")[:, 1]
+    rid_prob = cross_val_predict(models_info["ridge"]["pipeline"],    X_text, y, cv=cv, method="predict_proba")[:, 1]
+    rf_prob  = cross_val_predict(models_info["rf"]["pipeline"],       X_text, y, cv=cv, method="predict_proba")[:, 1]
 
     viz_utils.plot_roc_curves(
         [("Logistic", y, lr_prob), ("LASSO", y, las_prob),
@@ -305,11 +341,11 @@ def main(use_synthetic: bool = False, n_synthetic: int = 2000):
     print("=" * 60)
 
     df = step1_load_data(use_synthetic=use_synthetic, n_synthetic=n_synthetic)
-    X_tfidf, vectorizer, feature_names, y = step2_tfidf(df)
+    X_text, y = step2_tfidf(df)  # descriptive TF-IDF stats/word clouds only
 
-    logistic_info = step3_logistic(X_tfidf, y, feature_names)
-    reg_info      = step4_regularization(X_tfidf, y, feature_names)
-    rf_info       = step5_random_forest(X_tfidf, y, feature_names, reg_info["top_features"])
+    logistic_info = step3_logistic(X_text, y)
+    reg_info      = step4_regularization(X_text, y)
+    rf_info       = step5_random_forest(X_text, y, reg_info["top_features"])
 
     models_info = {
         "logistic": logistic_info,
@@ -317,13 +353,13 @@ def main(use_synthetic: bool = False, n_synthetic: int = 2000):
         "ridge":    reg_info["ridge"],
         "rf":       rf_info,
     }
-    comparison = step6_comparison(models_info, X_tfidf, y)
+    comparison = step6_comparison(models_info, X_text, y)
 
-    # Save checkpoint
+    # Save checkpoint: the full-sample-fit pipelines (each bundles its own
+    # fitted TF-IDF vectorizer + classifier) plus the raw text/labels.
     checkpoint = {
-        "vectorizer": vectorizer,
-        "feature_names": feature_names,
-        "X_tfidf": X_tfidf,
+        "pipelines": {name: info["pipeline"] for name, info in models_info.items()},
+        "X_text": X_text,
         "y": y,
     }
     with open("results/checkpoint_pipeline.pkl", "wb") as f:
