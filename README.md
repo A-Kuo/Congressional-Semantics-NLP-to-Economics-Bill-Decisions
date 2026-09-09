@@ -1,4 +1,4 @@
-# Congressional Semantics: NLP to Economics — Bill Pass/Fail Prediction
+# Congressional Semantics: NLP to Economics | Bill Pass/Fail Prediction
 
 [![Python](https://img.shields.io/badge/Python-3.12%2B-blue?logo=python&logoColor&style=plastic&logoColor=blue)](https://www.python.org/downloads/release/python-3120/)
 [![App](https://img.shields.io/badge/Fullstack-Ubuntu-orange?logo=Ubuntu&style=plastic)](https://ubuntu.com/ai/data-science)
@@ -149,6 +149,18 @@ overfitting before calling this reproducible. Two things were done:
 
 See `report/results_real_data.tex` Section "Is This Leakage or Real Signal?"
 for the full writeup, including permutation-test p-values.
+
+
+## Screenshots
+
+<img width="2968" height="1769" alt="image" src="https://github.com/user-attachments/assets/dd0f1684-caa8-4c7c-a143-56db24224f01" />
+<img width="2970" height="2369" alt="image" src="https://github.com/user-attachments/assets/a49335ec-0f6e-43ab-a694-ec629ccf5898" />
+<img width="3569" height="2968" alt="image" src="https://github.com/user-attachments/assets/2978f222-fd6a-48db-8f0f-1e26f514e74c" />
+
+
+Ever wonder why your bill idea never gets passed? Look at the probability:
+<img width="2370" height="1468" alt="image" src="https://github.com/user-attachments/assets/5053aaee-ece1-41e7-ba2f-4757ccdb2ca4" />
+
 
 ## Quick Start
 
