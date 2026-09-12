@@ -60,8 +60,11 @@ congressional-nlp-econ/
 │   └── synthetic_data.py     # Synthetic data generator (testing only, --synthetic flag)
 ├── results/
 │   ├── tables/               # CSV tables of model performance
-│   └── figures/              # PNG plots (confusion matrices, ROC, etc.)
+│   ├── figures/              # PNG plots (confusion matrices, ROC, etc.)
+│   ├── statistical_analysis/ # p-values, CIs, permutation-test results
+│   └── checkpoint_pipeline.pkl  # Fitted pipelines (used by app.py's live demo)
 ├── run_pipeline.py           # End-to-end runner (default: real data)
+├── app.py                    # Streamlit dashboard (streamlit run app.py)
 └── requirements.txt
 ```
 
@@ -180,6 +183,25 @@ Ever wonder why your bill idea never gets passed? Look at the probability:
    jupyter notebook notebooks/02_eda_preprocessing.ipynb
    ...
    ```
+
+## Streamlit Dashboard
+
+`app.py` is an interactive dashboard over this repo's actual `results/` output
+— no synthetic/placeholder content, it reads the real CSVs/figures/checkpoint
+the pipeline scripts above produce (and tells you which file is missing if you
+haven't run a given script yet).
+
+```bash
+streamlit run app.py
+```
+
+Sections: **Overview** (headline numbers), **Dataset** (per-Congress breakdown,
+word clouds), **Model Performance** (CV comparison table, ROC curves, confusion
+matrices), **Feature Interpretation** (top LASSO/RF words), **Leakage Audit &
+Generalization** (permutation-test and leave-one-Congress-out results — the
+"is this real signal" answer), and **Try It Yourself** (paste floor-speech
+text, get a live prediction + which words drove it, from the fitted
+`results/checkpoint_pipeline.pkl` pipelines).
 
 ## Key Deliverables
 

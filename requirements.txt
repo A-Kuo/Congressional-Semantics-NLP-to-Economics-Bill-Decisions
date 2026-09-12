@@ -10,3 +10,4 @@ transformers>=4.35
 torch>=2.0
 jupyter>=1.0
 ipython>=8.0
+streamlit>=1.38
