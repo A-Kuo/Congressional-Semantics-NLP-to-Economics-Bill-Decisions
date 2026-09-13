@@ -26,6 +26,10 @@ broader/noisier) method than whatever produced the original sample. See
 `report/results_real_data.tex` for the full real-data Results section and
 `data/README_data.md` for the linkage methodology.
 
+[**Demo Here**](https://congressional-semantics-econometrics-8tovh4s3ciwdex22rhghb.streamlit.app/)
+
+https://congressional-semantics-econometrics-8tovh4s3ciwdex22rhghb.streamlit.app/
+
 ## Repository Structure
 
 ```
