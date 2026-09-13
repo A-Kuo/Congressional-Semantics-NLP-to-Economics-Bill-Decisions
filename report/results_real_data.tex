@@ -101,10 +101,15 @@ The AUC values above are high enough to warrant asking whether they reflect genu
 \toprule
 \textbf{Model} & \textbf{True AUC} & \textbf{Null Mean AUC} & \textbf{Null Std.} & \textbf{$p$} \\
 \midrule
-PERMUTATION\_TABLE\_PLACEHOLDER \\
+Random Forest       & 0.955 & 0.497 & 0.037 & 0.003 \\
+Ridge Logistic       & 0.928 & 0.494 & 0.042 & 0.010 \\
+Logistic Regression  & 0.919 & 0.496 & 0.043 & 0.003 \\
+LASSO Logistic       & 0.918 & 0.503 & 0.033 & 0.010 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+For every model, the true AUC exceeded \emph{every single} label-shuffled permutation (300 permutations for Logistic and Random Forest, 100 for LASSO and Ridge, the latter capped lower only because their nested hyperparameter search makes each permutation far more expensive) -- the reported $p$-values are the minimum achievable at each permutation count, not a precise estimate of a much smaller true $p$-value. Null-distribution means sit at $\approx 0.50$ in all four cases, exactly as expected when labels carry no information, which is itself a sanity check that the permutation procedure is implemented correctly.
 
 \paragraph{Leave-one-Congress-out (LOCO).} The pooled 5-fold cross-validation above still draws every fold's test set from the same five Congressional sessions the model was tuned on. As a stricter test, each model is instead trained on four Congresses and evaluated on the fifth, entirely unseen one, repeated once per Congress (Table \ref{tab:loco}). A large drop from the pooled AUC to the LOCO AUC would indicate the model is fitting session-specific quirks rather than a generalizable procedural-language signal.
 

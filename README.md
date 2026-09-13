@@ -131,10 +131,21 @@ overfitting before calling this reproducible. Two things were done:
   (Random Forest 0.963 → 0.955; others within 0.001–0.011) — this leakage path
   was not the main driver of the scores.
 - **Permutation test** (`scripts/permutation_test.py`): shuffles labels and
-  repeats cross-validation to build a null AUC distribution per model. True
-  AUCs sit far outside their null bands (null distributions center on ~0.50,
-  as expected under no signal) — see `results/statistical_analysis/permutation_test_results.csv`
-  and `results/figures/permutation_null_distribution.png`.
+  repeats cross-validation to build a null AUC distribution per model. For
+  every model, the true AUC exceeded **every single** shuffled permutation:
+
+  | Model | True AUC | Null Mean AUC (Std.) | p-value | Permutations |
+  |---|---|---|---|---|
+  | Random Forest | 0.955 | 0.497 (0.037) | 0.003 | 300 |
+  | Ridge | 0.928 | 0.494 (0.042) | 0.010 | 100 |
+  | Logistic | 0.919 | 0.496 (0.043) | 0.003 | 300 |
+  | LASSO | 0.918 | 0.503 (0.033) | 0.010 | 100 |
+
+  (LASSO/Ridge use fewer permutations — their nested hyperparameter search
+  makes each permutation far more expensive; p-values shown are the minimum
+  achievable at each count, not a precise estimate of a smaller true p-value.)
+  See `results/statistical_analysis/permutation_test_results.csv` and
+  `results/figures/permutation_null_distribution.png`.
 - **Leave-one-Congress-out** (`scripts/loco_generalization.py`): trains on 4
   Congresses, tests on the 5th entirely unseen one, repeated per Congress —
   the pooled 5-fold CV above still draws test folds from sessions the model
